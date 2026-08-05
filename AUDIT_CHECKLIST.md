@@ -15466,4 +15466,136 @@ if (localUser == CSteamID.Nil || !localUser.IsValid())
 
 - §14.113-§14.118（Codex 125th-132nd）：Stage 7-2-1 设计文档 v1.0 -> v1.5 演进
 - §14.119（Codex 133rd PASS + Stage 7-2-2 v1 编码实施）：v1 已由 Codex 134th 标记失效
-- **§14.120（Codex 134th FAIL + Stage 7-2-2 v1.1 定点返修）**：P0-WL-SNAPSHOT-THROW-01 + P0-WL-UNIT-REPRO-01 + P1-WL-LOCALUSER-VALIDATION-01 三项落实 + 17/17 单元测试全过 + 7 项机械自检全过 + 4/4 复审门全过 + DLL SHA-256 `55C12FCC...6258` / 729,600 bytes / MVID `038d3361-0c09-4089-a79f-06ccefb66521`
+- **§14.120（Codex 134th FAIL + Stage 7-2-2 v1.1 定点返修）**：P0-WL-SNAPSHOT-THROW-01 + P0-WL-UNIT-REPRO-01 + P1-WL-LOCALUSER-VALIDATION-01 三项落实 + 17/17 单元测试全过 + 7 项机械自检全过 + 4/4 复审门全过 + DLL SHA-256 `55C12FCC...6258` / 729,600 bytes / MVID `038d3361-0c09-4089-a79f-06ccefb66521`（v1.1 Agent 报告指纹，已被 Codex 135th §3 更正，见 §14.121）
+
+---
+
+## §14.121 Codex 第一百三十五次实现复审 PASS + Stage 7-2-2 静态实现收官 + Stage 7-3 路线（2026-08-05）
+
+**审计报告**：`D:\Agent-工作目录\.audit\phase7-static-audit\Codex-135th-Stage7-2-2-v1.1-ImplementationReAudit-20260805.md`
+**Stage 7-3 蓝图**：`D:\Agent-工作目录\.audit\phase7-static-audit\Codex-Blueprint-Stage7-3-NativeP2PMenu-v1-20260805.md`
+
+### 14.121.1 核心裁决
+
+🟢 **Codex 135th 静态实现 PASS** - Stage 7-2-2 v1.1 三项阻断全部落实，独立复现 17/17 单元测试通过。
+
+- P0-WL-SNAPSHOT-THROW-01：PASS - `TryAdd`/`TryRemove` 的 `snapshot = _store.Snapshot()` 已在 `try` 内；异常会锁存 `_persistenceFaulted`，并在锁外经 gateway 只断开一次
+- P0-WL-UNIT-REPRO-01：PASS - `WhitelistTests/` 6 个源码/项目文件均为 git 跟踪；Codex 以 `dotnet msbuild` 独立实建插件和测试项目并执行 exe
+- P1-WL-LOCALUSER-VALIDATION-01：PASS - `TryAdd`/`TryRemove` 均在进入锁及 `Snapshot/Save` 前拒绝 Nil/invalid `LocalUser`
+
+不触发"审计失败后全权接管"条件。当前 DLL **不作为最终部署候选**（仍保留旧 IMGUI 入口，待 Stage 7-3 原生菜单实施后合并部署）。
+
+### 14.121.2 P1 构建：DLL 指纹更正
+
+| 项 | Agent v1.1 报告（MSBuild 18.5.3） | Codex 135th 独立复现（.NET SDK 10.0.201 `dotnet msbuild`） |
+|---|---|---|
+| SHA-256 | `55C12FCC89CAD18CA2FA18078D065C388653D41016FA048F21AB3316369F6258` | `D7610611B26C53F5D55AF6518E61513D1EF572754C46C82B45DF34BFF068FE36` |
+| MVID | `038d3361-0c09-4089-a79f-06ccefb66521` | `3f36f57c-2db9-4e68-a77f-736c2e004cfe` |
+| 字节数 | 729,600 | 729,600（一致） |
+| AssemblyVersion | 0.2.3.38 | 0.2.3.38（一致） |
+| 工具链 | MSBuild 18.5.3+60a3d41e9（VS 18 Insiders） | .NET SDK 10.0.201（`dotnet msbuild`） |
+
+**差异原因**：同一源代码、不同工具链产生不同 PE 时间戳与 MVID（非确定性构建）。Codex 连续两次 `dotnet msbuild` 重建得到相同值，证明其复现稳定。
+
+**裁决**：此项是构建报告/发布溯源 P1，不改变源代码静态 PASS。**任何后续测试或部署文档必须以最终实际待部署 DLL 的现场 SHA/MVID 为准，不得沿用旧值**。
+
+### 14.121.3 Codex 135th 独立复现结果
+
+| 项 | 结果 |
+|---|---|
+| 插件 Release 编译 | 0 errors；18 既有 `CS0612 ESteamPacket` warnings；0 新增 warning |
+| 测试项目 Release 编译 | 0 errors / 0 warnings |
+| 单元测试 | **17/17 PASS** |
+| `SteamWhitelist.*` 调用收敛 | 仅位于 `NativeWhitelistStore`；零 `_list` 访问 |
+| `Provider.disconnect()` 白名单路径 | 仅位于 `NativeWhitelistDisconnectGateway`；调用在 service 锁外 |
+
+### 14.121.4 Stage 7-2-2 收官状态
+
+| 项目 | 状态 |
+|---|---|
+| 三件套 seam（IWhitelistStore / IWhitelistRuntimeContext / IWhitelistDisconnectGateway） | 🟢 完成 |
+| 故障锁存 + 失败收敛 + disconnect 唯一入口 | 🟢 完成 |
+| service 静态唯一 | 🟢 完成 |
+| Snapshot 在 try/catch 内（P0-WL-SNAPSHOT-THROW-01） | 🟢 完成 |
+| LocalUser 有效性校验（P1-WL-LOCALUSER-VALIDATION-01） | 🟢 完成 |
+| 测试项目纳入 git（P0-WL-UNIT-REPRO-01） | 🟢 完成 |
+| 17/17 纯单元测试全过（clean checkout 可复现） | 🟢 完成 |
+| 静态实现审计 PASS | 🟢 Codex 135th PASS |
+| 当前 DLL 作为最终部署候选 | 🔴 否（仍保留旧 IMGUI 入口，待 Stage 7-3 合并） |
+| DLL 部署 / 启动 Unturned / P2P allow/reject 动态测试 | 🔴 继续禁止（须 Stage 7-3 实施后再合并授权） |
+
+### 14.121.5 Stage 7-3 原生 P2P 多级菜单路线
+
+**目标**：删除 SteamP2PFriends 的两个 IMGUI 主入口，改用 Unturned/Glazier 原生风格菜单；保持既有 P2P 启动、加入、Stage 6A/6B 与白名单核心逻辑不变。
+
+**最终用户流程**：
+```
+单人地图选择 -> 多人联机 -> 作为房主 / 作为客机 -> SteamID 输入
+                                        ↘
+                                  世界加载后：原生聊天公告 SteamID + 原生 HUD 复制按钮
+```
+
+**新增模块**：
+1. `UI/P2PNativeMenuUI.cs` - 进程内唯一菜单控制器（`EnsureCreated` / `OpenRoleMenu` / `OpenJoinMenu` / `TryStartHost` / `TryJoin` / `Destroy`）
+2. `UI/P2PHostIdentityAnnouncementUI.cs` - 房主身份公告 + 本地复制面板（`Tick` / `ResetForSession` / `ResetAfterSession` / `Destroy`）
+
+**最小接线变更**：
+1. `Patches/MenuPlaySingleplayerUIPatch.cs` - "多人联机"按钮点击改为 `P2PNativeMenuUI.OpenRoleMenu(selectedLevel)`
+2. `SteamP2PFriendsPlugin.cs` - Awake 初始化 + Update Tick + 删除 IMGUI 调用 + OnDestroy Destroy
+3. `HostManager.cs` - 仅在 P2P 会话 reset/exit/abort 收敛点调用 `ResetAfterSession()`
+4. `Client/SteamIdInputModal.cs` + `Host/HostSteamIdDisplayService.cs` - **彻底删除**（首选）
+
+**静态验收门**（9 项）：见蓝图 §6，含 Glazier/ISleek* 唯一、零 OnGUI、零 GUI.Button、复用既有 HostManager/P2PJoinManager、DiagnosticBuildValid 守门、CreateStringField 输入、聊天公告每 session 一次、GUIUtility.systemCopyBuffer 复制、Destroy 清理、Release 0 errors/0 new warnings。
+
+**绝对禁止项**：不修改 U3-SDK/原生 `MenuPlay*`/`PlayerLifeUI`/`SleekChatEntryV2` 源码；不 patch 原生聊天条目点击复制；不改 HostManager 启动参数/Stage 6A/6B/白名单/offlineOnly/认证/LAN/Workshop/存档；不在 `OnGUI()` 保留房主/客机主交互（`P2PWhitelistModal` 不在本次 UI 迁移范围）；不因 UI 创建失败绕过 `DiagnosticBuildValid`。
+
+**动态测试**（须另行授权）：M1-M9 共 9 项（原生样式/返回链、房主原版地图、Workshop 地图、客机粘贴有效 ID、无效/自身 ID、聊天公告+HUD 复制、连续两次 P2P、单人/LAN/普通服务器无残留、卸载/回主菜单清理）。
+
+### 14.121.6 进度与授权门（Codex 135th §5）
+
+| # | 步骤 | 状态 |
+|---|---|---|
+| 1 | Stage 7-2-2 v1.1 白名单静态实现 | 🟢 PASS |
+| 2 | Stage 7-3 原生菜单实施 + Release 编译 + 静态审计 | ⏸️ 下一工作包（独立授权） |
+| 3 | 两项合并后：编制 P2P 白名单 + 原生菜单动态测试计划，并单独申请部署授权 | 🔴 待第 2 步完成 |
+| 4 | 在第 3 步授权前：不得部署 DLL、启动游戏或执行动态 P2P 测试 | 🔴 强制 |
+
+### 14.121.7 当前授权边界
+
+| 项目 | 裁决 |
+|---|---|
+| Stage 7-2-2 静态实现 | 🟢 Codex 135th PASS（收官） |
+| Stage 7-3 原生菜单 C# 实施 + Release 编译 | ⏸️ 须按蓝图 v1 实施，独立静态审计授权 |
+| 当前 DLL 部署到 BepInEx/plugins | 🔴 继续禁止（待 Stage 7-3 合并） |
+| 启动 Unturned / 单机冒烟 S0 | 🔴 继续禁止 |
+| P2P allow/reject 动态测试 | 🔴 继续禁止 |
+| LAN 动态测试 / Workshop / 迁移 / 认证 | 🔴 继续禁止 |
+| 修改 `SteamWhitelist` 原生类 / 访问 `_list` | 🔴 永久禁止 |
+| 在 `IWhitelistStore` 之外直接调用 `SteamWhitelist.*` | 🔴 永久禁止 |
+| 在 `IWhitelistDisconnectGateway` 之外直接调用 `Provider.disconnect()` | 🔴 永久禁止 |
+| `P2PWhitelistService` 设计为实例类 | 🔴 永久禁止 |
+| 手工破坏存档/权限制造失败 | 🔴 永久禁止 |
+| 正式版发布 | 🔴 继续禁止 |
+
+### 14.121.8 最终停止点
+
+- 🟢 Stage 7-2-2 v1.1 静态实现 Codex 135th PASS 收官
+- 🟢 17/17 纯单元测试全过（Codex 独立复现）
+- 🟢 6 项静态门 + 7 项机械自检 + 4 项复审门全过
+- 🟢 DLL 指纹更正记录（Agent MSBuild 18 vs Codex .NET SDK 10.0.201 工具链差异）
+- 🔴 当前 DLL 不作为最终部署候选（待 Stage 7-3 合并）
+- ⏸️ Stage 7-3 原生 P2P 多级菜单实施为下一独立工作包
+
+**下一步**：
+1. 申请 Stage 7-3 实施授权（按蓝图 v1）
+2. Stage 7-3 实施 + Release 编译 + 静态审计
+3. Stage 7-3 PASS 后，合并 Stage 7-2-2 + Stage 7-3 编制动态测试计划
+4. 单独申请最小 DLL 部署与 P2P allow/reject + 原生菜单动态测试授权
+5. 动态测试通过后，可申请扩展封闭 α 兼容包授权
+
+### 14.121.9 当前有效规范更新
+
+- §14.113-§14.118（Codex 125th-132nd）：Stage 7-2-1 设计文档 v1.0 -> v1.5 演进
+- §14.119（Codex 133rd PASS + Stage 7-2-2 v1 编码实施）：v1 已由 Codex 134th 标记失效
+- §14.120（Codex 134th FAIL + Stage 7-2-2 v1.1 定点返修）：v1.1 Agent 报告指纹已被 Codex 135th §3 更正
+- **§14.121（Codex 135th 静态实现 PASS + Stage 7-2-2 收官 + Stage 7-3 路线）**：三项阻断全过 + 17/17 单元测试 Codex 独立复现 + DLL 指纹更正（Codex .NET SDK 10.0.201：SHA-256 `D7610611...FE36` / MVID `3f36f57c-...`）+ 当前 DLL 不作为最终部署候选 + Stage 7-3 原生 P2P 多级菜单为下一独立工作包
