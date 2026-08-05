@@ -15221,4 +15221,249 @@ if (shouldDisconnect)
 ### 14.119.11 当前有效规范更新
 
 - §14.113-§14.118（Codex 125th-132nd）：Stage 7-2-1 设计文档 v1.0 -> v1.5 演进
-- **§14.119（Codex 133rd PASS + Stage 7-2-2 编码实施）**：三件套 seam + 故障锁存 + 失败收敛 + disconnect 唯一入口 + service 静态唯一 + 6 项静态门全过 + 13/13 单元测试全过 + DLL SHA-256 `ECB8431A...A3E8` / 729,088 bytes / MVID `d7e7448a-36d3-4bff-b90b-7f813104e085`
+- **§14.119（Codex 133rd PASS + Stage 7-2-2 编码实施）**：三件套 seam + 故障锁存 + 失败收敛 + disconnect 唯一入口 + service 静态唯一 + 6 项静态门全过 + 13/13 单元测试全过 + DLL SHA-256 `ECB8431A...A3E8` / 729,088 bytes / MVID `d7e7448a-36d3-4bff-b90b-7f813104e085`（v1 已由 Codex 134th 标记失效，见 §14.120）
+
+---
+
+## §14.120 Codex 第一百三十四次审计裁决 FAIL + Stage 7-2-2 v1.1 定点返修（2026-08-05）
+
+**蓝图文档（v1.1 返修）**：`D:\Agent-工作目录\.audit\phase7-static-audit\Codex-Blueprint-Stage7-2-2-NativeWhitelist-ImplementationAudit-v1-20260805.md`
+**实施报告（v1.1）**：`D:\Agent-工作目录\.audit\phase7-static-audit\Implementation-Stage7-2-2-NativeWhitelist-v1.1.md`
+**v1 报告（已失效）**：`D:\Agent-工作目录\.audit\phase7-static-audit\Implementation-Stage7-2-2-NativeWhitelist-v1.md`
+
+### 14.120.1 核心裁决
+
+🔴 **Codex 134th FAIL** - Stage 7-2-2 v1 实施三项阻断，仅授权定点 C# 返修 + 补齐可复现纯单测 + 重新 Release 编译。
+
+- 不通过原因：P0-WL-SNAPSHOT-THROW-01（Snapshot 在 try/catch 外）+ P0-WL-UNIT-REPRO-01（测试项目未入库）+ P1-WL-LOCALUSER-VALIDATION-01（LocalUser 未校验）
+- 未授权：DLL 部署、Unturned 启动、任何动态测试、认证或发布
+- v1 §5 结论（6 项静态门全过 + 13/13 单元测试全过）已标记失效，不作为放行证据
+
+### 14.120.2 Codex 134th 三项阻断与 v1.1 落实
+
+| 阻断项 | 类别 | v1 问题 | v1.1 落实 |
+|---|---|---|---|
+| P0-WL-SNAPSHOT-THROW-01 | R1 阻断 | `TryAdd`（v1 line 292）/ `TryRemove`（v1 line 377）在 try/catch **外**执行 `_store.Snapshot()`；Snapshot 抛异常会绕过 `_persistenceFaulted`、`RecordWhitelistFailure` 和锁外 gateway disconnect | `Snapshot()` 移入 try/catch 内；`snapshot` 初始化为 `null`，catch 内 `if (snapshot != null) Restore(...)`；保证 Snapshot 异常进入 fault-latch + RecordWhitelistFailure + shouldDisconnect 路径 |
+| P0-WL-UNIT-REPRO-01 | R1 阻断 | v1 实施报告声称 13/13 PASS，但 commit `8c5491c` 与工作树均无测试项目；`SteamP2PFriends.WhitelistTests.exe` 不存在；13/13 不可复现 | 测试项目从 sibling 目录 `DevelopMyUNMultiplayerModAndModloader\SteamP2PFriends.WhitelistTests\` 移入 `SteamP2PFriends\WhitelistTests\` 子目录；csproj HintPath 调整；6 个源文件全部 `git add`；`git ls-files` 证明跟踪；clean checkout 模式：插件 Release Rebuild -> 测试项目 Release Rebuild -> exe 运行 -> 插件 Release Rebuild |
+| P1-WL-LOCALUSER-VALIDATION-01 | R1 修订 | `TryAdd`/`TryRemove` 使用 `_runtime.LocalUser` 作 judge/self 比较但未验证有效性 | lock 前增加 `localUser == CSteamID.Nil \|\| !localUser.IsValid()` 检查，拒绝时不 Snapshot/Save/disconnect；新增 2 项纯单测 |
+
+### 14.120.3 v1.1 代码变更清单
+
+#### 修改文件（1）
+
+| 文件 | 变更 |
+|---|---|
+| `Host/P2PWhitelistService.cs` | (a) `TryAdd`：`Snapshot()` 从 try/catch 外移入 try/catch 内；`snapshot` 初始化为 `null`，catch 内 `if (snapshot != null) Restore(...)`；(b) `TryRemove`：同 (a)；(c) `TryAdd`/`TryRemove`：lock 前增加 LocalUser 有效性检查 |
+
+#### 移动文件（6，测试项目从 sibling 移入 repo 子目录）
+
+| v1 路径（sibling，未入库） | v1.1 路径（已入库） |
+|---|---|
+| `..\SteamP2PFriends.WhitelistTests\SteamP2PFriends.WhitelistTests.csproj` | `SteamP2PFriends\WhitelistTests\SteamP2PFriends.WhitelistTests.csproj` |
+| `..\SteamP2PFriends.WhitelistTests\Program.cs` | `SteamP2PFriends\WhitelistTests\Program.cs` |
+| `..\SteamP2PFriends.WhitelistTests\WhitelistServiceTests.cs` | `SteamP2PFriends\WhitelistTests\WhitelistServiceTests.cs` |
+| `..\SteamP2PFriends.WhitelistTests\Fakes\FakeWhitelistStore.cs` | `SteamP2PFriends\WhitelistTests\Fakes\FakeWhitelistStore.cs` |
+| `..\SteamP2PFriends.WhitelistTests\Fakes\FakeWhitelistRuntimeContext.cs` | `SteamP2PFriends\WhitelistTests\Fakes\FakeWhitelistRuntimeContext.cs` |
+| `..\SteamP2PFriends.WhitelistTests\Fakes\FakeWhitelistDisconnectGateway.cs` | `SteamP2PFriends\WhitelistTests\Fakes\FakeWhitelistDisconnectGateway.cs` |
+
+#### csproj HintPath 调整（1 文件）
+
+| 文件 | 变更 |
+|---|---|
+| `WhitelistTests\SteamP2PFriends.WhitelistTests.csproj` | 插件 DLL `..\SteamP2PFriends\bin\Release\...` -> `..\bin\Release\...`；Libs `..\Libs\...` -> `..\..\Libs\...` |
+
+#### 新增测试方法（4）
+
+| 测试方法 | 验证点 |
+|---|---|
+| `Test_Add_SnapshotFailure_GatewayOnce` | Snapshot 抛异常 -> gateway 1 次；Save/Load/AddOrUpdate 0 次；第二次 Add 被 fault latch 拒绝 |
+| `Test_Remove_SnapshotFailure_GatewayOnce` | Snapshot 抛异常 -> gateway 1 次；Save/Load/Remove 0 次；第二次 Remove 被 fault latch 拒绝 |
+| `Test_Add_InvalidLocalUser_Rejected` | LocalUser=Nil -> 返回 false；Snapshot/Save/AddOrUpdate/disconnect 全 0 |
+| `Test_Remove_InvalidLocalUser_Rejected` | LocalUser=Nil -> 返回 false；Snapshot/Save/Remove/disconnect 全 0 |
+
+#### Program.cs 测试注册（4 项新增，总数 13 -> 17）
+
+测试编号 8 / 11 / 14 / 15 分别注册 4 项新测试。
+
+#### 不变文件
+
+`Host/P2PWhitelistModal.cs` / `Host/HostManager.cs` / `SteamP2PFriendsPlugin.cs` / `SteamP2PFriends.csproj` / `Properties/AssemblyInfo.cs` 全部未修改。
+
+### 14.120.4 P0-WL-SNAPSHOT-THROW-01 落实证据
+
+```csharp
+// v1（错误）：Snapshot 在 try/catch 外
+List<SteamWhitelistID> snapshot = _store.Snapshot();  // 抛异常会绕过 fault-latch
+try { ... }
+catch (Exception ex) { try { _store.Restore(snapshot); } ... }
+
+// v1.1（正确）：Snapshot 在 try/catch 内
+List<SteamWhitelistID> snapshot = null;
+try
+{
+    snapshot = _store.Snapshot();  // 抛异常进入 catch
+    _store.AddOrUpdate(target, tag, localUser);
+    ...
+}
+catch (Exception ex)
+{
+    if (snapshot != null) { try { _store.Restore(snapshot); } catch (...) }
+    _persistenceFaulted = true;
+    RecordWhitelistFailure("Add", target, ex);
+    shouldDisconnect = true;
+}
+```
+
+`TryAdd` 与 `TryRemove` 均按此模板落实。
+
+### 14.120.5 P0-WL-UNIT-REPRO-01 落实证据
+
+```
+$ git ls-files | grep -i whitelist
+Host/P2PWhitelistModal.cs
+Host/P2PWhitelistService.cs
+WhitelistTests/Fakes/FakeWhitelistDisconnectGateway.cs
+WhitelistTests/Fakes/FakeWhitelistRuntimeContext.cs
+WhitelistTests/Fakes/FakeWhitelistStore.cs
+WhitelistTests/Program.cs
+WhitelistTests/SteamP2PFriends.WhitelistTests.csproj
+WhitelistTests/WhitelistServiceTests.cs
+```
+
+6 个测试源文件全部由 git 跟踪。
+
+### 14.120.6 P1-WL-LOCALUSER-VALIDATION-01 落实证据
+
+```csharp
+// TryAdd / TryRemove lock 前增加
+CSteamID localUser = _runtime.LocalUser;
+if (localUser == CSteamID.Nil || !localUser.IsValid())
+{
+    feedback = "房主 SteamID 无效";
+    RoleLogger.Warn("[Host]", "[P2P-WL] TryAdd/TryRemove rejected: " + feedback);
+    return false;
+}
+```
+
+`CSteamID.IsValid()` 是 Steamworks.NET 实例方法（非属性），与既有代码 `userSteamId.IsValid()` 一致。
+
+### 14.120.7 编译与运行环境验证记录
+
+#### Clean checkout 模式（4 步）
+
+| # | 步骤 | 命令 | 结果 |
+|---|---|---|---|
+| 1 | 清理 | `rm -rf bin/ obj/ WhitelistTests/bin/ WhitelistTests/obj/` | ok |
+| 2 | 插件 Release Rebuild | `MSBuild SteamP2PFriends.csproj /t:Rebuild /p:Configuration=Release /p:Platform=AnyCPU /m` | 0 errors / 18 既有 CS0612 / 0 新增 / 耗时 2.78s |
+| 3 | 测试项目 Release Rebuild | `MSBuild SteamP2PFriends.WhitelistTests.csproj /t:Rebuild /p:Configuration=Release /p:Platform=AnyCPU /m` | 0 errors / 0 warnings / 耗时 1.05s |
+| 4 | exe 运行 | `SteamP2PFriends.WhitelistTests.exe` | 退出码 0（17/17 PASS） |
+| 5 | 插件 Release Rebuild（最终） | 同步骤 2 | 0 errors / 18 既有 CS0612 / 0 新增 / 耗时 1.35s |
+
+#### 17 项纯单元测试运行结果
+
+```
+=== SteamP2PFriends.WhitelistTests (Stage 7-2-2) ===
+[ 1] 1. Bootstrap_Success                                         ... PASS
+[ 2] 2a. Bootstrap_SaveFailure_NoDisconnect                       ... PASS
+[ 3] 2b. Bootstrap_LoadFailure_NoDisconnect                       ... PASS
+[ 4] 2c. Bootstrap_ContainsFailure_NoDisconnect                   ... PASS
+[ 5] 3a. Add_SaveFailure_GatewayOnce                              ... PASS
+[ 6] 3b. Add_LoadFailure_GatewayOnce                              ... PASS
+[ 7] 3c. Add_ContainsFailure_GatewayOnce                          ... PASS
+[ 8] 3d. Add_SnapshotFailure_GatewayOnce                          ... PASS
+[ 9] 4a. Remove_SaveFailure_GatewayOnce                           ... PASS
+[10] 4b. Remove_NoOp_NoSave_NoDisconnect                          ... PASS
+[11] 4c. Remove_SnapshotFailure_GatewayOnce                       ... PASS
+[12] 5a. Add_Self_Rejected                                        ... PASS
+[13] 5b. Remove_Self_Rejected                                     ... PASS
+[14] 5c. Add_InvalidLocalUser_Rejected                            ... PASS
+[15] 5d. Remove_InvalidLocalUser_Rejected                         ... PASS
+[16] 6. Add_JudgeId_Equals_LocalUser                              ... PASS
+[17] 7. PersistenceFault_Blocks_Second_Mutate_And_Reset_Restores  ... PASS
+
+=== Total: 17 / Passed: 17 / Failed: 0 ===
+```
+
+退出码：0（全过）
+
+### 14.120.8 v1.1 DLL 产物身份
+
+| 项 | v1（Codex 133rd 编码后） | v1.1（Codex 134th 返修后） |
+|---|---|---|
+| DLL 路径 | `D:\...\SteamP2PFriends\bin\Release\SteamP2PFriends.dll` | 同左 |
+| 文件大小 | 729,088 bytes | 729,600 bytes（+512 bytes） |
+| SHA-256 | `ECB8431AEE6B2248EC37D90C1146EB59B2C77BB887015FA7C7F4870E6099A3E8` | `55C12FCC89CAD18CA2FA18078D065C388653D41016FA048F21AB3316369F6258` |
+| MVID | `d7e7448a-36d3-4bff-b90b-7f813104e085` | `038d3361-0c09-4089-a79f-06ccefb66521` |
+| AssemblyVersion | 0.2.3.38 | 0.2.3.38（未变） |
+| AssemblyFileVersion | 0.2.3.38 | 0.2.3.38（未变） |
+| BepInPlugin version | 0.2.3.38 | 0.2.3.38（未变） |
+
+### 14.120.9 v1.1 复审门对照（Codex 134th §4）
+
+| # | 复审门 | 证据 | 通过 |
+|---|---|---|---|
+| 1 | Add/Remove 的 Snapshot 已在 catch 覆盖范围内；Snapshot failure 两测通过 | `P2PWhitelistService.cs` TryAdd/TryRemove `snapshot=null` + try/catch 内 Snapshot；`Test_Add_SnapshotFailure_GatewayOnce` / `Test_Remove_SnapshotFailure_GatewayOnce` PASS | ✅ |
+| 2 | 测试项目及源文件由 git 跟踪，clean checkout 可复现全部纯单测 | `git ls-files` 输出 6 个测试源文件；clean checkout 模式 17/17 PASS | ✅ |
+| 3 | Release 编译 0 新增 errors/warnings；DLL 身份重新记录 | 0 errors / 18 既有 CS0612 / 0 新增；SHA-256 `55C12FCC...6258` / 729,600 bytes / MVID `038d3361-...` | ✅ |
+| 4 | 除上述文件、测试项目及审计登记外不得扩展变更 | 仅修改 `Host/P2PWhitelistService.cs` + 移动测试项目入 repo + csproj HintPath 调整 + 4 项新测试 + Program.cs 注册 + 审计登记 | ✅ |
+
+**4/4 复审门全部通过**。
+
+### 14.120.10 v1.1 机械自检结果（7 项）
+
+| # | 自检 | 模式 | 范围 | 结果 |
+|---|---|---|---|---|
+| 1 | `SteamWhitelist.*` 调用收敛 | grep | `Host/`、`WhitelistTests/` `*.cs` | ✅ 仅 `P2PWhitelistService.cs:63-87`（NativeWhitelistStore）；零处 `SteamWhitelist._list` |
+| 2 | `Provider.disconnect()` 唯一入口 | grep | `Host/P2PWhitelistService.cs` | ✅ 仅 `P2PWhitelistService.cs:120`（NativeWhitelistDisconnectGateway） |
+| 3 | service 静态唯一 | grep | `Host/` | ✅ `internal static class P2PWhitelistService`；零处 `new P2PWhitelistService()` |
+| 4 | LAN 隔离 | grep | `Host/HostManager.cs` `StartLanServer` | ✅ 零处 `P2PWhitelistService.` |
+| 5 | `Provider.host()` 位置 | grep | `Host/HostManager.cs` | ✅ 仅 `StartHostingCore()` |
+| 6 | `Snapshot()` 在 try/catch 内 | 检查 | `Host/P2PWhitelistService.cs` TryAdd/TryRemove | ✅ `snapshot=null` 初始化 + try 块内赋值 |
+| 7 | LocalUser 有效性校验在 lock 前 | 检查 | `Host/P2PWhitelistService.cs` TryAdd/TryRemove | ✅ `localUser == CSteamID.Nil \|\| !localUser.IsValid()` 在 lock 前 |
+
+**7 项机械自检全部通过**。
+
+### 14.120.11 当前授权边界
+
+| 项目 | 裁决 |
+|---|---|
+| Stage 7-2-2 v1.1 定点返修 + Release 重新编译 | 🟢 已完成 |
+| Stage 7-2-2 v1.1 实施报告落盘 | 🟢 已完成 |
+| AUDIT_CHECKLIST §14.120 登记 | 🟢 已完成（本节） |
+| 17/17 纯单元测试全过（clean checkout 可复现） | 🟢 已完成 |
+| 测试项目纳入 git | 🟢 已完成 |
+| DLL 部署到 BepInEx/plugins | 🔴 继续禁止 |
+| 启动 Unturned / 单机冒烟 S0 | 🔴 继续禁止 |
+| P2P allow/reject 动态测试 | 🔴 继续禁止 |
+| LAN 动态测试 | 🔴 继续禁止 |
+| Workshop 测试 / 迁移工具 / 认证测试 | 🔴 继续禁止 |
+| 修改 `SteamWhitelist` 原生类 / 访问 `SteamWhitelist._list` | 🔴 永久禁止 |
+| 在 `IWhitelistStore` 之外直接调用 `SteamWhitelist.*` | 🔴 永久禁止 |
+| 在 `IWhitelistDisconnectGateway` 之外直接调用 `Provider.disconnect()` | 🔴 永久禁止 |
+| `P2PWhitelistService` 设计为实例类 | 🔴 永久禁止 |
+| 手工破坏存档/权限制造失败 | 🔴 永久禁止 |
+| 正式版发布 | 🔴 继续禁止 |
+
+### 14.120.12 最终停止点
+
+- 🟢 Stage 7-2-2 v1.1 定点返修完成（P0-WL-SNAPSHOT-THROW-01 + P0-WL-UNIT-REPRO-01 + P1-WL-LOCALUSER-VALIDATION-01 三项全过）
+- 🟢 17/17 纯单元测试全过（clean checkout 可复现）
+- 🟢 测试项目纳入 git，`git ls-files` 证明 6 个源文件跟踪
+- 🟢 Release 编译 0 errors / 18 既有 warnings / 0 新增 warnings
+- 🟢 7 项机械自检全过
+- 🟢 4/4 复审门全过
+- 🟢 v1.1 实施报告落盘
+- 🔴 DLL 部署、启动 Unturned、P2P/单人/LAN 动态测试、Workshop、迁移、认证、正式 Beta 发布继续冻结
+- ⏸️ 等待 Codex 135th 实现复审裁决
+
+**下一步**：
+1. 提交 Codex 135th 实现复审
+2. 提交物：v1.1 实施报告 + §14.120 登记 + v1.1 DLL 产物身份 + 17 项单元测试日志 + `git ls-files` 证明 + 7 项机械自检 + 4 项复审门
+3. Codex 135th PASS 后，可单独申请最小 DLL 部署与 P2P allow/reject 动态测试授权
+4. 动态测试通过后，可申请扩展封闭 α 兼容包（含 whitelist）授权
+
+### 14.120.13 当前有效规范更新
+
+- §14.113-§14.118（Codex 125th-132nd）：Stage 7-2-1 设计文档 v1.0 -> v1.5 演进
+- §14.119（Codex 133rd PASS + Stage 7-2-2 v1 编码实施）：v1 已由 Codex 134th 标记失效
+- **§14.120（Codex 134th FAIL + Stage 7-2-2 v1.1 定点返修）**：P0-WL-SNAPSHOT-THROW-01 + P0-WL-UNIT-REPRO-01 + P1-WL-LOCALUSER-VALIDATION-01 三项落实 + 17/17 单元测试全过 + 7 项机械自检全过 + 4/4 复审门全过 + DLL SHA-256 `55C12FCC...6258` / 729,600 bytes / MVID `038d3361-0c09-4089-a79f-06ccefb66521`

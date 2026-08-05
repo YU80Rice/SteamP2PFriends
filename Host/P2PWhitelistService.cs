@@ -265,6 +265,14 @@ namespace SteamP2PFriends.Host
             }
 
             CSteamID localUser = _runtime.LocalUser;
+            // P1-WL-LOCALUSER-VALIDATION-01（Codex 134th）：LocalUser 无效时拒绝，不 Snapshot/Save/Disconnect
+            if (localUser == CSteamID.Nil || !localUser.IsValid())
+            {
+                feedback = "房主 SteamID 无效";
+                RoleLogger.Warn("[Host]", "[P2P-WL] TryAdd rejected: " + feedback);
+                return false;
+            }
+
             if (target == localUser)
             {
                 feedback = "不能添加房主自身（已在 bootstrap 时加入）";
@@ -289,9 +297,12 @@ namespace SteamP2PFriends.Host
                     return false;
                 }
 
-                List<SteamWhitelistID> snapshot = _store.Snapshot();
+                // P0-WL-SNAPSHOT-THROW-01（Codex 134th）：Snapshot 在 try/catch 内，
+                // 失败走 Restore（若 snapshot 非 null）+ fault-latch + 锁外 disconnect
+                List<SteamWhitelistID> snapshot = null;
                 try
                 {
+                    snapshot = _store.Snapshot();
                     _store.AddOrUpdate(target, tag, localUser);
                     _store.Save();
                     _store.Load();
@@ -303,10 +314,13 @@ namespace SteamP2PFriends.Host
                 }
                 catch (Exception ex)
                 {
-                    try { _store.Restore(snapshot); }
-                    catch (Exception restoreEx)
+                    if (snapshot != null)
                     {
-                        SafeLogRestoreFailure("Add", restoreEx);
+                        try { _store.Restore(snapshot); }
+                        catch (Exception restoreEx)
+                        {
+                            SafeLogRestoreFailure("Add", restoreEx);
+                        }
                     }
                     _persistenceFaulted = true;
                     RecordWhitelistFailure("Add", target, ex);
@@ -357,6 +371,14 @@ namespace SteamP2PFriends.Host
             }
 
             CSteamID localUser = _runtime.LocalUser;
+            // P1-WL-LOCALUSER-VALIDATION-01（Codex 134th）：LocalUser 无效时拒绝，不 Snapshot/Save/Disconnect
+            if (localUser == CSteamID.Nil || !localUser.IsValid())
+            {
+                feedback = "房主 SteamID 无效";
+                RoleLogger.Warn("[Host]", "[P2P-WL] TryRemove rejected: " + feedback);
+                return false;
+            }
+
             if (target == localUser)
             {
                 feedback = "不能移除房主自身";
@@ -374,9 +396,12 @@ namespace SteamP2PFriends.Host
                     return false;
                 }
 
-                List<SteamWhitelistID> snapshot = _store.Snapshot();
+                // P0-WL-SNAPSHOT-THROW-01（Codex 134th）：Snapshot 在 try/catch 内，
+                // 失败走 Restore（若 snapshot 非 null）+ fault-latch + 锁外 disconnect
+                List<SteamWhitelistID> snapshot = null;
                 try
                 {
+                    snapshot = _store.Snapshot();
                     bool removed = _store.Remove(target);
                     if (!removed)
                     {
@@ -397,10 +422,13 @@ namespace SteamP2PFriends.Host
                 }
                 catch (Exception ex)
                 {
-                    try { _store.Restore(snapshot); }
-                    catch (Exception restoreEx)
+                    if (snapshot != null)
                     {
-                        SafeLogRestoreFailure("Remove", restoreEx);
+                        try { _store.Restore(snapshot); }
+                        catch (Exception restoreEx)
+                        {
+                            SafeLogRestoreFailure("Remove", restoreEx);
+                        }
                     }
                     _persistenceFaulted = true;
                     RecordWhitelistFailure("Remove", target, ex);

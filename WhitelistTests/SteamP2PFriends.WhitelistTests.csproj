@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProjectGuid>{B3C4D5E6-F7A8-9012-3456-789ABCDEF013}</ProjectGuid>
+    <OutputType>Exe</OutputType>
+    <AppDesignerFolder>Properties</AppDesignerFolder>
+    <RootNamespace>SteamP2PFriends.WhitelistTests</RootNamespace>
+    <AssemblyName>SteamP2PFriends.WhitelistTests</AssemblyName>
+    <TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
+    <FileAlignment>512</FileAlignment>
+    <LangVersion>10</LangVersion>
+    <Deterministic>true</Deterministic>
+    <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Stage 7-2-2 蓝图 §3：仅引用编译出的插件和现有 Libs，不生成/写入任何游戏或存档文件 -->
+    <!-- 使用 DLL 引用（SteamP2PFriends.csproj 的 ProjectGuid 历史格式问题不修改） -->
+    <!-- Private=True 让 CLR 加载 SteamP2PFriends.dll 时能解析所有传递依赖 -->
+    <Reference Include="SteamP2PFriends">
+      <HintPath>..\bin\Release\SteamP2PFriends.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="BepInEx">
+      <HintPath>..\..\Libs\BepInEx.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="0Harmony">
+      <HintPath>..\..\Libs\0Harmony.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="com.rlabrecque.steamworks.net">
+      <HintPath>..\..\Libs\com.rlabrecque.steamworks.net.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="Assembly-CSharp">
+      <HintPath>..\..\Libs\Assembly-CSharp.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="UnityEngine">
+      <HintPath>..\..\Libs\UnityEngine.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>..\..\Libs\UnityEngine.CoreModule.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="UnityEngine.AudioModule">
+      <HintPath>..\..\Libs\UnityEngine.AudioModule.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="UnityEngine.IMGUIModule">
+      <HintPath>..\..\Libs\UnityEngine.IMGUIModule.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="UnityEngine.PhysicsModule">
+      <HintPath>..\..\Libs\UnityEngine.PhysicsModule.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="UnityEngine.TextRenderingModule">
+      <HintPath>..\..\Libs\UnityEngine.TextRenderingModule.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="SDG.Glazier.Runtime">
+      <HintPath>..\..\Libs\SDG.Glazier.Runtime.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="SDG.NetTransport">
+      <HintPath>..\..\Libs\SDG.NetTransport.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="SDG.NetPak.Runtime">
+      <HintPath>..\..\Libs\SDG.NetPak.Runtime.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Program.cs" />
+    <Compile Include="WhitelistServiceTests.cs" />
+    <Compile Include="Fakes\FakeWhitelistStore.cs" />
+    <Compile Include="Fakes\FakeWhitelistRuntimeContext.cs" />
+    <Compile Include="Fakes\FakeWhitelistDisconnectGateway.cs" />
+  </ItemGroup>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+</Project>
