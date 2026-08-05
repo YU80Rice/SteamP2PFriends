@@ -14587,6 +14587,120 @@ whitelist(steamID, tag, judgeID) -> save()
 
 ---
 
+## §14.117 Codex 第 131 次静态审计 Stage 7-2-1 v1.3 -> v1.4 返修（2026-08-05）
+
+**蓝图文档**：`D:\Agent-工作目录\.audit\phase7-static-audit\Codex-Blueprint-Stage7-2-NativeWhitelist-v3-20260805.md`
+
+**设计文档**：`D:\Agent-工作目录\.audit\phase7-static-audit\Stage7-2-1-NativeWhitelistDesign-v1.md`（已升级至 v1.4）
+
+### 14.117.1 核心裁决
+
+| 项目 | 裁决 |
+|---|---|
+| Stage 7-2-1 v1.3 设计 | 🔴 **FAIL** |
+| v1.4 设计返修 | 🟢 已完成，待 Codex 132nd 静态审计 |
+| C# 代码修改 | 🔴 继续禁止 |
+| 编译 | 🔴 继续禁止 |
+| 部署 | 🔴 继续禁止 |
+| 动态测试 | 🔴 继续禁止 |
+| 修改原生 `SteamWhitelist` 类 | 🔴 永久禁止（Codex 131st §2） |
+| 生产代码访问 `SteamWhitelist._list` | 🔴 永久禁止（P0-WL-SNAPSHOT-API-01） |
+| 在 `IWhitelistStore` 之外直接调用 `SteamWhitelist.load/save` | 🔴 永久禁止（P0-WL-SEAM-01） |
+| 手工破坏存档/权限制造失败 | 🔴 永久禁止（P1-WL-FAILURE-TEST-01） |
+
+### 14.117.2 Codex 131st 两项 P0 阻断
+
+| 阻断项 | 描述 | v1.4 落实位置 |
+|---|---|---|
+| P0-WL-SNAPSHOT-API-01（R1） | v1.3 将快照/恢复写为 `SteamWhitelist._list`；该字段是 private，外部 service 无法访问，失败收敛契约不可编码 | §3.10 改为仅经 public `SteamWhitelist.list`（`SteamWhitelist.cs:14`）读取、深拷贝（`Select(x => new SteamWhitelistID(x.steamID, x.tag, x.judgeID)).ToList()`）、`Clear/Add` 恢复；给出准确 C# 骨架 |
+| P0-WL-SEAM-01（R1） | 设计要求 writer/loader seam 单元测试，但仍直接调用不可注入的 `SteamWhitelist.load/save`，没有接口、默认实现和测试替身边界 | §3.10 定义唯一 `IWhitelistStore` 包装层（Load/Save/Contains/AddOrUpdate/Remove/Snapshot/Restore）；`NativeWhitelistStore` 生产实现调用原生 API；测试 fake 实现可注入 Load/Save/Contains 的异常或结果；`P2PWhitelistService` 持有生产默认 store，仅 internal test hook 可替换 |
+
+### 14.117.3 Codex 131st P1 修订
+
+| P1 项 | 描述 | v1.4 落实位置 |
+|---|---|---|
+| P1-WL-REMOVE-NOOP-01（R1） | v1.3 未规定 `SteamWhitelist.unwhitelist()` 返回 false 的语义，可能把不存在的条目伪报"已移除" | §3.8 false 时不 Save、不 Disconnect；刷新列表并提示"条目已不存在"；仅 true 才进入 Save -> Load -> Contains(target)==false 流程；§6.6 T24 单元测试覆盖 |
+
+### 14.117.4 v1.4 强制实现契约（Codex 131st §2-§3）
+
+| 契约 | 落实位置 |
+|---|---|
+| 唯一接口 `IWhitelistStore`（Load/Save/Contains/AddOrUpdate/Remove/Snapshot/Restore） | §3.10 |
+| 生产实现 `NativeWhitelistStore` 调用原生 API | §3.10 |
+| 测试 fake 可注入 Load/Save/Contains 异常或结果 | §3.10 / §6.6 |
+| 快照经 public `SteamWhitelist.list` 深拷贝 | §3.10 |
+| 恢复经 `SteamWhitelist.list.Clear/Add` | §3.10 |
+| `P2PWhitelistService` 持有生产默认 `NativeWhitelistStore`；仅 internal test hook 可替换 | §3.10 |
+| 所有 mutate/bootstrap 先 `ThreadUtil.assertIsGameThread()` + `lock (WhitelistSync)` + 三重 host 守卫 | §3.3 / §3.10 |
+| Bootstrap：`Load -> AddOrUpdate(host) -> Save -> Load -> Contains(host)`；仅最后 true 时 `Provider.isWhitelisted=true` | §4.1 |
+| Add：snapshot -> AddOrUpdate -> Save -> Load -> Contains(target)==true；失败 Restore(snapshot) + 主线程 `Provider.disconnect()` | §3.7 |
+| Remove：snapshot -> Remove(target)；false 不 Save/不 Disconnect；true 再 Save -> Load -> Contains(target)==false | §3.8 |
+| 既有 postcondition、`Provider.disconnect()` 唯一终止入口、三重 host 条件不回退 | §4.1 / §3.7 / §3.8 / §3.3 |
+| 目标文件：仅可新增 `Host/P2PWhitelistService.cs` | §3.10 |
+| 允许在 `HostManager.cs` 接线 bootstrap、在插件既有 `OnGUI()` 接线 modal | §3.10 |
+| 不得改原生 `SteamWhitelist`、Commander、认证、LAN、Stage 6A/6B | §5.5 / §7.8 |
+
+### 14.117.5 Stage 7-2-1 v1.4 设计文档章节结构
+
+| 章节 | 内容 |
+|---|---|
+| §0 | 修订说明（v1.3 -> v1.4）：Codex 131st 阻断项与 P1 修订 + 强制实现契约 + 文件保留策略 |
+| §1 | 设计目标（含 postcondition 复读 + 可测试 seam + 零处访问 `_list`） |
+| §2 | 设计范围（含排除"访问 `SteamWhitelist._list` 私有字段" + "修改原生 `SteamWhitelist` 类"） |
+| §3 | 原生 API、service 层与客机名单维护入口（§3.1 含 `list`/`_list` 字段对比；§3.7 / §3.8 原子化失败策略；§3.9 文件状态记录；§3.10 service 层设计含 `IWhitelistStore`/`NativeWhitelistStore`/`P2PWhitelistService` 完整 C# 骨架） |
+| §4 | 房主 Bootstrap 设计（§4.1 严格时序含 `Load -> AddOrUpdate -> Save -> Load -> Contains(host)`；§4.3 Fail-Closed 边界含复读失败 + postcondition 失败） |
+| §5 | P2P 专用隔离设计（§5.5 含 `Provider.disconnect()` 调用链不修改 + Commander 不修改 + 原生 `SteamWhitelist` 不修改） |
+| §6 | 允许/拒绝测试矩阵（§6.4 含 T14/T15 后置条件失败；§6.6 T20-T24 seam 单元测试 + T24 `Remove==false` no-op；§6.7 T29 失败终止入口唯一性 + T30 零处访问 `_list`） |
+| §7 | 与现有系统的兼容性分析（§7.7 `Provider.disconnect()` / `ProviderDisconnectPatch` 链路；§7.8 与原生 `SteamWhitelist` 类的关系） |
+| §8 | 安全性分析（§8.1 含 postcondition + seam；§8.7 含不承诺自动恢复 + `Restore` 经接口；§8.8 入口守卫与 seam；§8.9 移除 no-op 语义；§8.10 残留风险 6 项） |
+| §9 | 实现估算（21 小时） |
+| §10 | 授权边界（含禁止修改原生 + 禁止访问 `_list` + 禁止绕过 seam） |
+| §11 | 待关闭的动态门（含 P0-WL-SNAPSHOT-API-01、P0-WL-SEAM-01、P1-WL-REMOVE-NOOP-01） |
+| §12 | 下一步（等待 Codex 132nd） |
+
+### 14.117.6 v1.4 关键设计决策
+
+| 决策 | 理由 |
+|---|---|
+| `IWhitelistStore` 接口为唯一可注入边界 | 单元测试需注入 Load/Save/Contains 异常或结果；生产代码无法替换 store；seam 边界明确 |
+| `NativeWhitelistStore` 包装原生 API | 生产实现调用 `SteamWhitelist.load/save/whitelist/unwhitelist/checkWhitelisted`；不暴露 `_list` |
+| 快照经 public `SteamWhitelist.list` 深拷贝 | `_list` 为 private，外部不可访问；`list` 为 public，可读；深拷贝避免后续 mutate 影响快照 |
+| 恢复经 `SteamWhitelist.list.Clear/Add` | 不访问 `_list`；经 public `list` 清空并重建；保证内存收敛 |
+| `Remove == false` 为合法 no-op | 原版 `unwhitelist` 返回 bool 表示是否移除成功；false 时不应 Save/Disconnect，应刷新列表并提示"条目已不存在" |
+| `SetStoreForTesting` 为 internal | 仅单元测试项目（`InternalsVisibleTo`）可访问；生产代码无法替换 store |
+| 接线边界严格限定 | 仅可新增 `Host/P2PWhitelistService.cs`；`HostManager.cs` 接线 bootstrap；`OnGUI()` 接线 modal；不得改原生/Commander/认证/LAN/Stage 6A/6B |
+
+### 14.117.7 残留风险（待 Stage 7-2-2 静态/实现确认）
+
+| 风险 | 等级 | 缓解措施 |
+|---|---|---|
+| `Provider.user` 在 bootstrap 时机的可用性 | P2 | Stage 7-2-2 静态确认 |
+| `IWhitelistStore` 接口的 `InternalsVisibleTo` 配置 | P2 | Stage 7-2-2 实现时确定 |
+| `WhitelistSync` 锁粒度与性能影响 | P2 | Stage 7-2-2 实现时评估 |
+| `Provider.disconnect()` 调用链在失败场景下的时序 | P2 | Stage 7-2-2 静态确认 `ProviderDisconnectPatch.Postfix` 在失败场景仍能触发 |
+| `SteamWhitelistID` 构造函数签名确认 | P2 | Stage 7-2-2 静态确认 `new SteamWhitelistID(CSteamID, string, CSteamID)` 可用 |
+| UI 模态框的具体实现 | P2 | Stage 7-2-2 实现时确定 |
+
+### 14.117.8 最终停止点
+
+- 🟡 Stage 7-2-1 v1.4 已落盘（待 Codex 132nd 静态审计）
+- 🔴 C# 代码、编译、部署、动态测试、认证改动、正式 Beta 发布继续冻结
+- 🔴 Stage 7-2-2 编码、编译、部署、动态测试继续冻结
+- 🔴 手工破坏存档/权限制造失败永久禁止
+- 🔴 修改原生 `SteamWhitelist` 类永久禁止
+- 🔴 生产代码访问 `SteamWhitelist._list` 永久禁止
+- 🔴 在 `IWhitelistStore` 之外直接调用 `SteamWhitelist.load/save` 永久禁止
+- ⏸️ 等待 Codex 132nd 静态审计 Stage 7-2-1 v1.4
+
+**下一步**：
+1. 等待 Codex 132nd 静态审计 Stage 7-2-1 v1.4
+2. 审计 PASS 后，可申请 Stage 7-2-2（实现 + 单元测试）授权
+3. Stage 7-2-2 须先完成 §8.10 列出的 6 项静态确认项
+4. 实现 + 单元测试通过后，可申请 Stage 7-2-3（动态测试）授权
+5. 动态测试通过后，可申请扩展封闭 α 兼容包（含 whitelist）授权
+
+---
+
 ## §14.59 Codex 第八十四次保存观察器 v1 定点返修与 v1.1 编码实施（2026-08-01）
 
 **蓝图文档**：`D:\Agent-工作目录\.audit\phase6-static-audit\Codex-Blueprint-Stage6A-P2P-U3DSParity-v1.4-20260801.md`
