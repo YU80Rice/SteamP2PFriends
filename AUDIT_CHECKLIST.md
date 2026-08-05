@@ -14487,6 +14487,106 @@ whitelist(steamID, tag, judgeID) -> save()
 
 ---
 
+## §14.116 Codex 第 130 次静态审计 Stage 7-2-1 v1.2 -> v1.3 返修（2026-08-05）
+
+**蓝图文档**：`D:\Agent-工作目录\.audit\phase7-static-audit\Codex-Blueprint-Stage7-2-NativeWhitelist-v2-20260805.md`
+
+**设计文档**：`D:\Agent-工作目录\.audit\phase7-static-audit\Stage7-2-1-NativeWhitelistDesign-v1.md`（已升级至 v1.3）
+
+### 14.116.1 核心裁决
+
+| 项目 | 裁决 |
+|---|---|
+| Stage 7-2-1 v1.2 设计 | 🔴 **FAIL** |
+| v1.3 设计返修 | 🟢 已完成，待 Codex 131st 静态审计 |
+| C# 代码修改 | 🔴 继续禁止 |
+| 编译 | 🔴 继续禁止 |
+| 部署 | 🔴 继续禁止 |
+| 动态测试 | 🔴 继续禁止 |
+| 手工破坏存档/权限制造失败 | 🔴 永久禁止（P1-WL-FAILURE-TEST-01） |
+
+### 14.116.2 Codex 130th 两项 P0 阻断
+
+| 阻断项 | 描述 | v1.3 落实位置 |
+|---|---|---|
+| P0-WL-POSTCONDITION-01（R1） | bootstrap 在 `save()` 返回后直接置 `Provider.isWhitelisted=true`，未复读文件验证房主条目 | §4.1 / §4.3：bootstrap 序列改为 `load -> 验证 Provider.user -> whitelist(host) -> save -> load -> checkWhitelisted(host) -> Provider.isWhitelisted=true -> Provider.host()`；任一步异常或 postcondition 为 false：`Provider.isWhitelisted=false`，调用既有开房 abort，禁止 `Provider.host()` |
+| P0-WL-STOP-SEMANTICS-01（R1） | 运行中保存失败仅写"停止会话/房主退出"，未定义能触发原版断开与 Stage 6A/6B 清理的调用序 | §3.7 / §3.8：失败路径改为：主线程调用 `Provider.disconnect()`，由既有 `ProviderDisconnectPatch.Postfix`（`ProviderDisconnectPatch.cs:55-61`）调 `HostManager.StopP2PServer()`；不得直接把 `StopP2PServer()` 当作网络断开 |
+
+### 14.116.3 Codex 130th 两项 P1 修订
+
+| P1 项 | 描述 | v1.3 落实位置 |
+|---|---|---|
+| P1-WL-PERSISTENCE-CLAIM-01（R1） | 声称失败后下次开房必恢复旧文件，原生写入实际会移动旧文件至 `Whitelist.dat~`，该结果无此保证 | §3.7 / §3.8 / §3.9：改为"持久化状态未知；会话立即终止；不作自动恢复承诺"；记录主文件 `Whitelist.dat` 与备份文件 `Whitelist.dat~` 的存在性、大小、SHA-256 供人工恢复 |
+| P1-WL-FAILURE-TEST-01（R1） | T18/T19 以磁盘满/权限不足作动态前置，但未定义安全、可复现的注入机制 | §6.6 T20-T23 改为 service 层可替换 writer/loader seam 的单元测试；动态阶段只观察真实失败，禁止手工破坏存档或权限 |
+
+### 14.116.4 v1.3 强制实现契约（Codex 130th §2）
+
+| 契约 | 落实位置 |
+|---|---|
+| Bootstrap：`save -> load -> checkWhitelisted(host)` 全过才 `Provider.isWhitelisted=true` | §4.1 / §4.3 |
+| 运行中变更：`snapshot -> native mutate -> save -> load -> exact expected-membership check` | §3.7 / §3.8 |
+| 失败唯一终止入口：主线程 `Provider.disconnect()` | §3.7 / §3.8 / §7.7 |
+| 入口守卫：`HostManager.IsP2PHostMode && Provider.isServer && Provider.isWhitelisted` + `ThreadUtil.assertIsGameThread()` + `lock (WhitelistSync)` | §3.2 / §3.3 / §8.8 |
+| 不承诺自动恢复，记录 `.dat`/`.dat~` 状态 | §3.7 / §3.8 / §3.9 |
+| T20-T23 改为单元 seam 注入 | §6.6 |
+
+### 14.116.5 Stage 7-2-1 v1.3 设计文档章节结构
+
+| 章节 | 内容 |
+|---|---|
+| §0 | 修订说明（v1.2 -> v1.3）：Codex 130th 阻断项与 P1 修订 + 强制实现契约 + 文件保留策略 |
+| §1 | 设计目标（含 postcondition 复读） |
+| §2 | 设计范围（含排除"手工破坏存档/权限制造失败"） |
+| §3 | 原生 API 与客机名单维护入口（§3.1 含 `Whitelist.dat~` 备份文件语义；§3.3 入口守卫；§3.7 / §3.8 原子化失败策略；§3.9 文件状态记录） |
+| §4 | 房主 Bootstrap 设计（§4.1 严格时序含 `save -> load -> checkWhitelisted`；§4.3 Fail-Closed 边界含复读失败 + postcondition 失败） |
+| §5 | P2P 专用隔离设计（§5.5 含 `Provider.disconnect()` 调用链不修改 + Commander 不修改） |
+| §6 | 允许/拒绝测试矩阵（§6.4 含 T14/T15 后置条件失败；§6.6 T20-T23 seam 单元测试 + 禁止手工破坏；§6.7 T28 失败终止入口唯一性） |
+| §7 | 与现有系统的兼容性分析（§7.7 与 `Provider.disconnect()` / `ProviderDisconnectPatch` 链路） |
+| §8 | 安全性分析（§8.1 含 postcondition；§8.7 含不承诺自动恢复；§8.8 入口守卫与线程安全；§8.9 残留风险 5 项） |
+| §9 | 实现估算（22 小时） |
+| §10 | 授权边界（含禁止手工破坏存档/权限） |
+| §11 | 待关闭的动态门（含 P0-WL-POSTCONDITION-01、P0-WL-STOP-SEMANTICS-01、P1-WL-PERSISTENCE-CLAIM-01、P1-WL-FAILURE-TEST-01） |
+| §12 | 下一步（等待 Codex 131st） |
+
+### 14.116.6 v1.3 关键设计决策
+
+| 决策 | 理由 |
+|---|---|
+| Bootstrap 后置条件 `save -> load -> checkWhitelisted(host) == true` | `save()` 是 void，未抛异常 ≠ 持久化成功；必须复读文件验证房主条目实际写入 |
+| 失败终止入口唯一为 `Provider.disconnect()` | 既有 `ProviderDisconnectPatch.Postfix` 会调 `StopP2PServer()`，触发 Stage 6A/6B 清理；直接调 `StopP2PServer()` 跳过原版断开链路 |
+| 持久化状态明确为"未知" | `ServerSavedata.openRiver(..., false)` 会先移动 `Whitelist.dat` 到 `Whitelist.dat~`，保存失败时 `Whitelist.dat` 与 `Whitelist.dat~` 的存在性不等于可恢复性 |
+| 文件状态记录（pre/post save 的 `Whitelist.dat` 与 `Whitelist.dat~` 存在性/大小/SHA-256） | service 层在每次保存前后必须记录，供人工恢复判断；v1.3 不实现自动恢复 |
+| T20-T23 改为 service seam 单元测试 | 磁盘满/权限不足不可复现且破坏用户文件；seam 注入可复现且不破坏真实存档 |
+| 入口守卫三重检查 + 主线程断言 + 锁 | 防止客机进程、主菜单、LAN 模式意外触发 UI 操作；防止竞态；防止非主线程调用 |
+| 内存快照恢复仅为当前错误收敛 | 不延伸到下次会话；不承诺持久化恢复；与"持久化状态未知"语义一致 |
+
+### 14.116.7 残留风险（待 Stage 7-2-2 静态/实现确认）
+
+| 风险 | 等级 | 缓解措施 |
+|---|---|---|
+| `Provider.user` 在 bootstrap 时机的可用性 | P2 | Stage 7-2-2 静态确认 |
+| service 层 seam 的具体接口（writer/loader 可替换性） | P2 | Stage 7-2-2 实现时确定 |
+| `WhitelistSync` 锁粒度与性能影响 | P2 | Stage 7-2-2 实现时评估 |
+| `Provider.disconnect()` 调用链在失败场景下的时序 | P2 | Stage 7-2-2 静态确认 `ProviderDisconnectPatch.Postfix` 在失败场景仍能触发 |
+| UI 模态框的具体实现 | P2 | Stage 7-2-2 实现时确定 |
+
+### 14.116.8 最终停止点
+
+- 🟡 Stage 7-2-1 v1.3 已落盘（待 Codex 131st 静态审计）
+- 🔴 C# 代码、编译、部署、动态测试、认证改动、正式 Beta 发布继续冻结
+- 🔴 Stage 7-2-2 编码、编译、部署、动态测试继续冻结
+- 🔴 手工破坏存档/权限制造失败永久禁止
+- ⏸️ 等待 Codex 131st 静态审计 Stage 7-2-1 v1.3
+
+**下一步**：
+1. 等待 Codex 131st 静态审计 Stage 7-2-1 v1.3
+2. 审计 PASS 后，可申请 Stage 7-2-2（实现 + 单元测试）授权
+3. Stage 7-2-2 须先完成 §8.9 列出的 5 项静态确认项
+4. 实现 + 单元测试通过后，可申请 Stage 7-2-3（动态测试）授权
+5. 动态测试通过后，可申请扩展封闭 α 兼容包（含 whitelist）授权
+
+---
+
 ## §14.59 Codex 第八十四次保存观察器 v1 定点返修与 v1.1 编码实施（2026-08-01）
 
 **蓝图文档**：`D:\Agent-工作目录\.audit\phase6-static-audit\Codex-Blueprint-Stage6A-P2P-U3DSParity-v1.4-20260801.md`
