@@ -1,0 +1,39 @@
+# Build outputs
+bin/
+obj/
+publish/
+
+# Audit working artifacts (logs, manifests, temporary reports)
+# Key audit conclusions are summarized in AUDIT_CHECKLIST.md
+.audit/
+
+# Logs
+logs-*/
+*.log
+
+# Backups
+*.bak
+*.backup
+*-backup*
+*-backup.md
+AUDIT_CHECKLIST-v1.1-backup.md
+*.v1.1-backup
+
+# IDE / Editor
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.userprefs
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Temporary
+*.tmp
+*.temp
+*.swp
+*~

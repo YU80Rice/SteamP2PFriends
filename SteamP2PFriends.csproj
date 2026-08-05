@@ -1,0 +1,210 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProjectGuid>{A2B3C4D5-E6F7-4890-9012-3456789ABCDEF}</ProjectGuid>
+    <OutputType>Library</OutputType>
+    <AppDesignerFolder>Properties</AppDesignerFolder>
+    <RootNamespace>SteamP2PFriends</RootNamespace>
+    <AssemblyName>SteamP2PFriends</AssemblyName>
+    <TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
+    <FileAlignment>512</FileAlignment>
+    <LangVersion>10</LangVersion>
+    <Deterministic>true</Deterministic>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="0Harmony">
+      <HintPath>..\Libs\0Harmony.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="BepInEx">
+      <HintPath>..\Libs\BepInEx.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Assembly-CSharp">
+      <HintPath>..\Libs\Assembly-CSharp.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine">
+      <HintPath>..\Libs\UnityEngine.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>..\Libs\UnityEngine.CoreModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.AudioModule">
+      <HintPath>..\Libs\UnityEngine.AudioModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.IMGUIModule">
+      <HintPath>..\Libs\UnityEngine.IMGUIModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.PhysicsModule">
+      <HintPath>..\Libs\UnityEngine.PhysicsModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.TextRenderingModule">
+      <HintPath>..\Libs\UnityEngine.TextRenderingModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="SDG.Glazier.Runtime">
+      <HintPath>..\Libs\SDG.Glazier.Runtime.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="SDG.NetTransport">
+      <HintPath>..\Libs\SDG.NetTransport.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="SDG.NetPak.Runtime">
+      <HintPath>..\Libs\SDG.NetPak.Runtime.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="com.rlabrecque.steamworks.net">
+      <HintPath>..\Libs\com.rlabrecque.steamworks.net.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+    <Reference Include="Microsoft.CSharp" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="SteamP2PFriendsPlugin.cs" />
+    <Compile Include="Shared\SteamRuntime.cs" />
+    <Compile Include="Shared\ReflectionUtil.cs" />
+    <Compile Include="Shared\RoleLogger.cs" />
+    <Compile Include="Shared\DiagnosticContext.cs" />
+    <Compile Include="Shared\Enums\EHostMode.cs" />
+    <Compile Include="Shared\Enums\EP2PLobbyState.cs" />
+    <Compile Include="Shared\Enums\EJoinState.cs" />
+    <Compile Include="Host\HostManager.cs" />
+    <Compile Include="Host\Stage6ASaveRoundtripObserver.cs" />
+    <Compile Include="Host\Stage6BWorkshopSession.cs" />
+    <Compile Include="Host\MasterBundleHashInitializer.cs" />
+    <Compile Include="Host\P2PLobbyManager.cs" />
+    <Compile Include="Host\HasCheatsGuardWatcher.cs" />
+    <Compile Include="Host\SteamGameServerCallbacksWatcher.cs" />
+    <Compile Include="Host\HostSteamIdDisplayService.cs" />
+    <Compile Include="Host\PlayerInitializationTracker.cs" />
+    <Compile Include="Client\P2PJoinManager.cs" />
+    <Compile Include="Client\SteamIdInputModal.cs" />
+    <Compile Include="Client\ClientLobbyListener.cs" />
+    <Compile Include="Client\NativeLoadingGateDumper.cs" />
+    <Compile Include="Client\DisconnectTracer.cs" />
+    <Compile Include="Patches\SteamUserP2PRedirectPatch.cs" />
+    <Compile Include="Patches\CallbackCreateGameServerRedirectPatch.cs" />
+    <Compile Include="Patches\LobbiesGameCreatedPatch.cs" />
+    <Compile Include="Patches\ClientMethodLoopbackPatch.cs" />
+    <Compile Include="Patches\LanTestDuplicateBypassPatch.cs" />
+    <Compile Include="Patches\ProviderInitializeDedicatedUGCPatch.cs" />
+    <Compile Include="Patches\ProviderDisconnectPatch.cs" />
+    <Compile Include="Patches\SteamworksServerMultiplayerServiceOpenPatch.cs" />
+    <Compile Include="Patches\SteamworksServerMultiplayerServiceClosePatch.cs" />
+    <Compile Include="Patches\MenuPlaySingleplayerUIPatch.cs" />
+    <Compile Include="Patches\SteamNetworkingRouteDiagnosticsPatch.cs" />
+    <Compile Include="Patches\ServerTransportInitializeDiagnosticPatch.cs" />
+    <Compile Include="Patches\UnityLogBridgePatch.cs" />
+    <Compile Include="Patches\ProviderAcceptDiagnosticPatch.cs" />
+    <Compile Include="Patches\ProviderAddPlayerDiagnosticPatch.cs" />
+    <Compile Include="Patches\PlayerInitializeDiagnosticPatch.cs" />
+    <Compile Include="Patches\NetMessagesSendDiagnosticPatch.cs" />
+    <Compile Include="Patches\ClientAcceptedHandlerDiagnosticPatch.cs" />
+    <Compile Include="Patches\ProviderDismissDiagnosticPatch.cs" />
+    <Compile Include="Patches\SteamPlayerConstructorDiagnosticPatch.cs" />
+    <Compile Include="Patches\SteamPlayerIsLocalServerHostPatch.cs" />
+    <Compile Include="Patches\PlayerUpdateGuardPatch.cs" />
+    <Compile Include="Patches\PlayerMovementInitializePlayerPrefixPatch.cs" />
+    <Compile Include="Patches\GameplayReadyBitmaskPatch.cs" />
+    <Compile Include="Patches\ProviderRejectDiagnosticPatch.cs" />
+    <Compile Include="Patches\ProviderAcceptStageDiagnosticPatch.cs" />
+    <Compile Include="Patches\PlayerComponentInitializeDiagnosticPatch.cs" />
+    <Compile Include="Patches\InitialStateReceiveDiagnosticPatch.cs" />
+    <Compile Include="Patches\QueuePositionChangedDiagnosticPatch.cs" />
+    <Compile Include="Patches\LocalRegionProgressDiagnosticPatch.cs" />
+    <Compile Include="Patches\DisconnectTracerPatch.cs" />
+    <Compile Include="Patches\AuthStatusCallbackSafetyPatch.cs" />
+    <Compile Include="Client\GameplayReadyTracker.cs" />
+    <Compile Include="Client\FriendStatusObserver.cs" />
+    <Compile Include="Client\NativeSnsLogProbe.cs" />
+    <Compile Include="Shared\SnsDiagnosticUtil.cs" />
+    <Compile Include="Shared\ConnectionLifecycleTracker.cs" />
+    <Compile Include="Shared\ListenRegionSyncEligibility.cs" />
+    <Compile Include="Host\RemotePlayerRenderProbe.cs" />
+    <Compile Include="Patches\BarricadeManagerRegionSyncPatch.cs" />
+    <Compile Include="Patches\StructureManagerRegionSyncPatch.cs" />
+    <Compile Include="Patches\ItemManagerRegionSyncPatch.cs" />
+    <Compile Include="Patches\ResourceManagerRegionSyncPatch.cs" />
+    <Compile Include="Patches\ObjectManagerRegionSyncPatch.cs" />
+    <Compile Include="Patches\AssetIntegritySnapshotPatch.cs" />
+    <Compile Include="Patches\PlayerClothingVisibilityDiagnosticPatch.cs" />
+    <Compile Include="Patches\PlayerClothingLoadAppearanceFixPatch.cs" />
+    <Compile Include="Patches\PlayerLookAnimatorDiagnosticPatch.cs" />
+    <Compile Include="Patches\SteamChannelSendDiagnosticPatch.cs" />
+    <Compile Include="Patches\SteamChannelTransportDiagnosticPatch.cs" />
+    <Compile Include="Patches\PlayerMovementTellStateDiagnosticPatch.cs" />
+    <Compile Include="Patches\PlayerAnimatorSmrEnabledDiagnosticPatch.cs" />
+    <Compile Include="Patches\LoadingUIUpdateDiagnosticPatch.cs" />
+    <Compile Include="Patches\PlayerIsLoadingClothingDiagnosticPatch.cs" />
+    <Compile Include="Patches\PlayerInitializePlayerStageDiagnosticPatch.cs" />
+    <Compile Include="Patches\UnityTagErrorSourceDiagnosticPatch.cs" />
+    <Compile Include="Patches\PlayerMovementTellStateCallerDiagnosticPatch.cs" />
+    <Compile Include="Patches\NetMessageDeliveryPathDiagnosticPatch.cs" />
+    <Compile Include="Patches\PlayerLifecycleReadyDiagnosticPatch.cs" />
+    <Compile Include="Patches\PlayerInitializePlayerStagedTimingDiagnosticPatch.cs" />
+    <Compile Include="Patches\PlayerManagerBroadcastPatch.cs" />
+    <Compile Include="Patches\RemotePlayerClothingVisibleBridgePatch.cs" />
+    <Compile Include="Patches\PlayerManagerBroadcastDiagnosticPatch.cs" />
+    <Compile Include="Client\ClientRemotePlayerRenderProbe.cs" />
+    <Compile Include="Shared\DiagnosticMaskUtil.cs" />
+    <Compile Include="Patches\WorldSyncDiagnosticCore.cs" />
+    <Compile Include="Patches\ItemManagerWorldSyncDiagnosticPatch.cs" />
+    <Compile Include="Patches\ResourceManagerWorldSyncDiagnosticPatch.cs" />
+    <Compile Include="Patches\ObjectManagerWorldSyncDiagnosticPatch.cs" />
+    <Compile Include="Patches\VehicleManagerWorldSyncDiagnosticPatch.cs" />
+    <Compile Include="Patches\AnimalManagerWorldSyncDiagnosticPatch.cs" />
+    <Compile Include="Patches\ZombieManagerWorldSyncDiagnosticPatch.cs" />
+    <Compile Include="Patches\ZombieManagerP0DGenerateZombiesPatch.cs" />
+    <Compile Include="Patches\ZombieManagerP0C1SendZombieStatesPatch.cs" />
+    <Compile Include="Patches\VehicleManagerP0C1ReplicationPatch.cs" />
+    <Compile Include="Patches\AnimalManagerP0C2SendAnimalStatesPatch.cs" />
+    <Compile Include="Patches\ItemManagerP0B3PreGeneratePatch.cs" />
+    <Compile Include="Patches\ItemManagerP0B6RegenerateOnLevelLoadedPatch.cs" />
+    <Compile Include="Patches\NetMessagesPlayerConnectedLoopbackPatch.cs" />
+    <Compile Include="Patches\PlayerUIPauseTimeScalePatch.cs" />
+    <Compile Include="Patches\VehicleEnterDiagnosticPatch.cs" />
+    <Compile Include="Patches\P0EDiagnostic\UseableBarricadeDiagnosticPatch.cs" />
+    <Compile Include="Patches\P0EDiagnostic\ZombieEntityMappingDiagnosticPatch.cs" />
+    <Compile Include="Patches\P0EDiagnostic\PlayerManagerCullingDiagnosticPatch.cs" />
+    <Compile Include="Patches\P0EZombieLifecycle\ZombieLifecyclePatch.cs" />
+    <Compile Include="Patches\P0EZombieLifecycle\ZombieLifecycleState.cs" />
+    <Compile Include="Patches\P0EZombieLifecycle\ZombieLifecycleOwnerVerify.cs" />
+    <Compile Include="Patches\P0EBarricadeLifecycle\BarricadeLifecycleHelper.cs" />
+    <Compile Include="Patches\P0EBarricadeLifecycle\BarricadeLifecycleILMatcher.cs" />
+    <Compile Include="Patches\P0EBarricadeLifecycle\BarricadeLifecycleTranspiler.cs" />
+    <Compile Include="Patches\P0EBarricadeLifecycle\BarricadeLifecycleOwnerVerify.cs" />
+    <Compile Include="Patches\P0EBarricadeLifecycle\BarricadeLifecycleRegistration.cs" />
+    <Compile Include="Patches\P0EBarricadeLifecycle\BarricadeLifecycleDiagQuota.cs" />
+    <Compile Include="Properties\AssemblyInfo.cs" />
+  </ItemGroup>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+</Project>
