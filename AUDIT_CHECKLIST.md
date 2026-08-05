@@ -14701,6 +14701,188 @@ whitelist(steamID, tag, judgeID) -> save()
 
 ---
 
+## §14.118 Codex 第 132 次静态审计 Stage 7-2-1 接管蓝图 -> v1.5 返修（2026-08-05）
+
+**蓝图文档**：`D:\Agent-工作目录\.audit\phase7-static-audit\Codex-Blueprint-Stage7-2-NativeWhitelist-Takeover-v1-20260805.md`（**Codex 接管设计权威来源**）
+
+**设计文档**：`D:\Agent-工作目录\.audit\phase7-static-audit\Stage7-2-1-NativeWhitelistDesign-v1.md`（已升级至 v1.5）
+
+### 14.118.1 核心裁决
+
+| 项目 | 裁决 |
+|---|---|
+| Codex 接管状态 | 🟢 已接管设计权威来源 |
+| Stage 7-2-1 v1-v4 设计 | 🟡 保留轨迹，但不得作为编码依据 |
+| Stage 7-2-1 v1.5 设计回填 | 🟢 已完成，待 Codex 133rd 静态核验 |
+| C# 代码修改 | 🔴 继续禁止 |
+| 编译 | 🔴 继续禁止 |
+| 部署 | 🔴 继续禁止 |
+| 动态测试 | 🔴 继续禁止 |
+| 修改原生 `SteamWhitelist` 类 | 🔴 永久禁止 |
+| 生产代码访问 `SteamWhitelist._list` | 🔴 永久禁止 |
+| 在 `IWhitelistStore` 之外直接调用 `SteamWhitelist.load/save/whitelist/unwhitelist/checkWhitelisted` | 🔴 永久禁止 |
+| 在 `IWhitelistDisconnectGateway` 之外直接调用 `Provider.disconnect()` 作为白名单终止入口 | 🔴 永久禁止 |
+| `P2PWhitelistService` 设计为实例类 | 🔴 永久禁止（必须 static class） |
+| 手工破坏存档/权限制造失败 | 🔴 永久禁止 |
+
+### 14.118.2 Codex 132nd 两项 P0 阻断
+
+| 阻断项 | 描述 | v1.5 落实位置 |
+|---|---|---|
+| P0-WL-SERVICE-OWNERSHIP-01 | v1.4 中 `P2PWhitelistService` 设计为实例类（`internal sealed class`），HostManager 与 modal 可能各自 new 出独立实例，状态不一致 | §3.10 改为 `internal static class P2PWhitelistService`，进程内唯一实例；HostManager 与 modal 调用同一入口；静态字段初始化器 new 生产默认依赖 |
+| P0-WL-TERMINATION-SEAM-01 | v1.4 中 `Provider.disconnect()` 直接在 service 内调用，单元测试无法验证 disconnect 调用 | §3.10 引入 `IWhitelistDisconnectGateway` 接口 + `NativeWhitelistDisconnectGateway` 生产实现（`Provider.disconnect()` 唯一调用点）；测试 fake 可断言 disconnect 调用 |
+
+### 14.118.3 Codex 132nd 接管蓝图核心要求
+
+| 要求 | v1.5 落实位置 |
+|---|---|
+| 三个接口：`IWhitelistStore` / `IWhitelistRuntimeContext` / `IWhitelistDisconnectGateway` | §3.10 |
+| 三个生产实现：`NativeWhitelistStore` / `NativeWhitelistRuntimeContext` / `NativeWhitelistDisconnectGateway` | §3.10 |
+| `P2PWhitelistService` 为 `internal static class`，进程内唯一 | §3.10 |
+| bootstrap 不调 `Provider.disconnect()`，由 HostManager abort 统一处理 | §4.1 / §4.3 |
+| Add/Remove 失败收敛模板：disconnect 严格在锁外调用，且仅一次 | §3.7 / §3.8 / §3.10 |
+| `_persistenceFaulted` 状态：故障锁存后拒绝后续 UI 操作 | §3.10 / §3.11 |
+| 严格输入校验：拒绝 Nil、无效 SteamID、空/过长 tag；拒绝移除当前房主 ID | §3.12 |
+| 接线点：从 `PrepareClientHostSession()` 删除 `SteamWhitelist.load()` | §4.4 |
+| 接线点：紧接 `StartHostingCore()` 前调 `ResetForP2PStart()` + `TryBootstrap()` | §4.4 |
+| 接线点：`AbortHostStart()` / `StopP2PServer()` finally 调 `ResetAfterP2PExit()` | §4.5 |
+| UI 文件分离：`Host/P2PWhitelistModal.cs` 仅 IMGUI 绘制，无原生名单访问 | §3.13 |
+| 测试 fake 覆盖 store/runtime/disconnect gateway 三类 | §6.6 |
+
+### 14.118.4 v1.5 强制实现契约（Codex 132nd §4-§5）
+
+**三个接口**（Codex 132nd §4）：
+
+```csharp
+internal interface IWhitelistStore {
+    void Load(); void Save(); bool Contains(CSteamID);
+    void AddOrUpdate(CSteamID, string, CSteamID);
+    bool Remove(CSteamID);
+    List<SteamWhitelistID> Snapshot();
+    void Restore(List<SteamWhitelistID> snapshot);
+}
+
+internal interface IWhitelistRuntimeContext {
+    void AssertGameThread();
+    bool IsActiveP2PHost { get; }
+}
+
+internal interface IWhitelistDisconnectGateway {
+    void DisconnectCurrentP2PHost();
+}
+```
+
+**bootstrap 业务契约**（Codex 132nd §5.1）：
+
+```text
+AssertGameThread -> lock -> Provider.isWhitelisted=false -> Load -> 验证 hostId.IsValid -> AddOrUpdate(hostId, "P2P_HOST", hostId) -> Save -> Load -> 若 !Contains(hostId) 失败 -> Provider.isWhitelisted=true -> return true
+```
+
+任一异常或后置条件失败：锁内将 `Provider.isWhitelisted=false`，记录失败，返回 false。**bootstrap 不调用 `Provider.disconnect()`**，由 HostManager 的既有 abort 统一处理。
+
+**Add/Remove 失败收敛模板**（Codex 132nd §5.2）：
+
+```csharp
+bool shouldDisconnect = false;
+lock (WhitelistSync) {
+    List<SteamWhitelistID> snapshot = _store.Snapshot();
+    try {
+        // mutate -> Save -> Load -> postcondition
+    } catch (Exception ex) {
+        try { _store.Restore(snapshot); }
+        catch (Exception restoreEx) { SafeLogRestoreFailure(restoreEx); }
+        _persistenceFaulted = true;
+        RecordWhitelistFailure(/* mutation, target, ex, file evidence */);
+        shouldDisconnect = true;
+    }
+}
+if (shouldDisconnect)
+    _disconnect.DisconnectCurrentP2PHost(); // 严格在锁外，且仅一次
+```
+
+### 14.118.5 Codex 132nd §7 静态验收门（7 项）
+
+| # | 验收门 | v1.5 落实位置 |
+|---|---|---|
+| 1 | `SteamWhitelist.*` 原生调用仅在 `NativeWhitelistStore` 中；零 `_list` 访问 | §3.10 / §7.8 / T32 |
+| 2 | `Provider.disconnect()` 仅在 `NativeWhitelistDisconnectGateway` 中，且锁外调用 | §3.10 / §7.7 / T33 |
+| 3 | 仅一个 static `P2PWhitelistService`；HostManager 与 modal 调用同一入口 | §3.10 / §7.9 / T34 |
+| 4 | bootstrap 位于所有既有 P2P 前置成功后、`StartHostingCore()` 前；LAN 不进入 | §4.1 / §4.4 |
+| 5 | Add/Remove 的 snapshot、Save、Load、精确后置条件、Remove=false no-op 均可 grep 证明 | §3.7 / §3.8 / T25 |
+| 6 | fake store/runtime/disconnect gateway 能覆盖 Save throw、Load throw、Contains false、Remove false，且每个失败断言 disconnect 一次 | §6.6 T21-T25 |
+| 7 | Stage 6A/6B、认证、Commander、LAN 没有修改 | §5.5 / §7 |
+
+### 14.118.6 Stage 7-2-1 v1.5 设计文档章节结构
+
+| 章节 | 内容 |
+|---|---|
+| §0 | 修订说明（v1.4 -> v1.5）：Codex 132nd 接管状态 + 阻断项与修订 + 强制实现契约 + 文件保留策略 |
+| §1 | 设计目标（含进程内唯一 service + seam 三件套 + 零处访问 `_list`） |
+| §2 | 设计范围（含排除"在 `IWhitelistDisconnectGateway` 之外直接调用 `Provider.disconnect()`" + "service 设计为实例类"） |
+| §3 | 原生 API、service 层与客机名单维护入口（§3.10 service 层设计含三个接口 + 三个生产实现 + static 单例 + `_persistenceFaulted`；§3.11 故障锁存状态；§3.12 严格输入校验；§3.13 UI 文件分离） |
+| §4 | 房主 Bootstrap 设计（§4.1 严格时序含 `ResetForP2PStart -> TryBootstrap -> StartHostingCore`；§4.3 Fail-Closed 边界含 bootstrap 不调 disconnect；§4.4 删除既有 `SteamWhitelist.load()`；§4.5 生命周期 reset） |
+| §5 | P2P 专用隔离设计（§5.5 含原生 `SteamWhitelist` 不修改 + `Provider.disconnect()` 调用链不修改） |
+| §6 | 允许/拒绝测试矩阵（§6.4 含 T12-T15 bootstrap fail-closed + 不调 disconnect；§6.5 T20 故障锁存拒绝 UI；§6.6 T21-T26 seam 三件套单元测试；§6.7 T31-T36 静态验收门 grep 证明） |
+| §7 | 与现有系统的兼容性分析（§7.7 `Provider.disconnect()` 唯一调用点；§7.8 与原生 `SteamWhitelist` 类的关系；§7.9 `P2PWhitelistService` 所有权） |
+| §8 | 安全性分析（§8.1 bootstrap 不调 disconnect；§8.7 disconnect 锁外调用；§8.10 故障锁存保证；§8.11 严格输入校验；§8.12 残留风险 9 项） |
+| §9 | 实现估算（26 小时） |
+| §10 | 授权边界（含禁止 service 设计为实例类 + 禁止绕过 disconnect gateway） |
+| §11 | 待关闭的动态门（含 P0-WL-SERVICE-OWNERSHIP-01、P0-WL-TERMINATION-SEAM-01） |
+| §12 | 下一步（等待 Codex 133rd） |
+
+### 14.118.7 v1.5 关键设计决策
+
+| 决策 | 理由 |
+|---|---|
+| `P2PWhitelistService` 为 `internal static class` | 进程内唯一实例；HostManager 与 modal 调用同一入口；避免状态不一致（Codex 132nd P0-WL-SERVICE-OWNERSHIP-01） |
+| 三个接口（`IWhitelistStore` / `IWhitelistRuntimeContext` / `IWhitelistDisconnectGateway`） | 单元测试需注入 Load/Save/Contains 异常或结果 + 断言 disconnect 调用；seam 边界明确（Codex 132nd P0-WL-TERMINATION-SEAM-01） |
+| `Provider.disconnect()` 唯一调用点在 `NativeWhitelistDisconnectGateway` | 单元测试可断言 disconnect 调用次数；生产代码无法绕过 gateway（Codex 132nd §7.2） |
+| bootstrap 不调 `Provider.disconnect()` | bootstrap 失败由既有 `StartP2PServer` 外层 catch -> `AbortHostStart()` 收敛；不重复终止逻辑（Codex 132nd §5.1） |
+| disconnect 严格在锁外调用 | 避免在锁内调用导致死锁或长时持锁；确保仅调用一次（Codex 132nd §5.2） |
+| `_persistenceFaulted` 状态 | 故障锁存后拒绝后续 UI 操作；防止故障后继续操作导致更严重不一致（Codex 132nd §5.2） |
+| 严格输入校验：拒绝移除当前房主 ID | 房主移除自身会导致自连被拒绝；保护 bootstrap 不变量（Codex 132nd §5.2） |
+| 从 `PrepareClientHostSession()` 删除 `SteamWhitelist.load()` | bootstrap 流程在 `TryBootstrap` 内首次 `Load` 时初始化 list；既有调用成为冗余且绕过 service seam（Codex 132nd §3.1.2） |
+| `ResetAfterP2PExit()` 不清空不保存 `SteamWhitelist.list` | 避免在 abort/stop 路径意外写入文件；仅清 service 运行时状态（Codex 132nd §3.2） |
+| UI 文件分离（`P2PWhitelistModal.cs`） | IMGUI 绘制职责与 service 业务逻辑分离；modal 无原生名单访问（Codex 132nd §2） |
+
+### 14.118.8 残留风险（待 Stage 7-2-2 静态/实现确认）
+
+| 风险 | 等级 | 缓解措施 |
+|---|---|---|
+| `Provider.user` 在 bootstrap 时机的可用性 | P2 | Stage 7-2-2 静态确认 |
+| `StartHostingCore()` 在 `HostManager.cs` 中的具体位置 | P2 | Stage 7-2-2 静态确认 |
+| `AbortHostStart()` / `StopP2PServer()` finally 块的接线可行性 | P2 | Stage 7-2-2 静态确认 |
+| 三个接口的 `InternalsVisibleTo` 配置 | P2 | Stage 7-2-2 实现时确定 |
+| `WhitelistSync` 锁粒度与性能影响 | P2 | Stage 7-2-2 实现时评估 |
+| `Provider.disconnect()` 调用链在失败场景下的时序 | P2 | Stage 7-2-2 静态确认 |
+| `SteamWhitelistID` 构造函数签名确认 | P2 | Stage 7-2-2 静态确认 |
+| `MaxTagLength` 上限确定 | P2 | Stage 7-2-2 实现时确定（建议 64） |
+| UI 模态框的具体实现 | P2 | Stage 7-2-2 实现时确定 |
+
+### 14.118.9 最终停止点
+
+- 🟡 Stage 7-2-1 v1.5 已落盘（待 Codex 133rd 静态核验）
+- 🟡 Codex 132nd 接管蓝图已落实为 v1.5 设计文档
+- 🔴 C# 代码、编译、部署、动态测试、认证改动、正式 Beta 发布继续冻结
+- 🔴 Stage 7-2-2 编码、编译、部署、动态测试继续冻结
+- 🔴 手工破坏存档/权限制造失败永久禁止
+- 🔴 修改原生 `SteamWhitelist` 类永久禁止
+- 🔴 生产代码访问 `SteamWhitelist._list` 永久禁止
+- 🔴 在 `IWhitelistStore` 之外直接调用 `SteamWhitelist.load/save/whitelist/unwhitelist/checkWhitelisted` 永久禁止
+- 🔴 在 `IWhitelistDisconnectGateway` 之外直接调用 `Provider.disconnect()` 作为白名单终止入口永久禁止
+- 🔴 `P2PWhitelistService` 设计为实例类永久禁止（必须 static class）
+- ⏸️ 等待 Codex 133rd 静态核验 Stage 7-2-1 v1.5（仅审查 Codex 132nd §7 的 7 项静态门）
+
+**下一步**：
+1. 等待 Codex 133rd 静态核验 Stage 7-2-1 v1.5（仅审查 7 项静态门）
+2. 核验通过后，可申请 Stage 7-2-2（最小编码 + 单元测试）授权
+3. Stage 7-2-2 须先完成 §8.12 列出的 9 项静态确认项
+4. Stage 7-2-2 须落实 Codex 132nd §7 的 7 项静态验收门
+5. 实现 + 单元测试通过后，可申请 Stage 7-2-3（动态测试）授权
+6. 动态测试通过后，可申请扩展封闭 α 兼容包（含 whitelist）授权
+
+---
+
 ## §14.59 Codex 第八十四次保存观察器 v1 定点返修与 v1.1 编码实施（2026-08-01）
 
 **蓝图文档**：`D:\Agent-工作目录\.audit\phase6-static-audit\Codex-Blueprint-Stage6A-P2P-U3DSParity-v1.4-20260801.md`
