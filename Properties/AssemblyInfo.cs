@@ -1,12 +1,16 @@
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
 [assembly: AssemblyTitle("SteamP2PFriends")]
-[assembly: AssemblyDescription("SteamP2PFriends v0.2.3.37 P0-B-6+P0-D-ESC-2 版（Codex 第二十五次双机测试外部审计 §4.1+§4.2 授权实施）：P0-B-6 onLevelLoaded Postfix 触发全地图 generateItems：25th 测试证明 v0.2.3.36 P0-B-5 在 OnServerHosted 时机过早，LevelItems.spawns=null 导致跳过预生成（主机日志 L596-L597）。修复：在 ItemManagerP0B3PreGeneratePatch.OnLevelLoaded_Postfix 中调用 P0-B-6 入口，检测 level > Level.BUILD_INDEX_SETUP + spawns 就绪 + IsP2PServerActive + 未执行过时触发 generateItems 全地图循环。静态标志位 _p0B6RegenerationDone 在 ResetHostSession/AbortHostStart 中重置。P0-D-ESC-2 Prefix 运行时诊断日志：25th 测试 Prefix 自检通过但 timeScale=0.00 持续 5-15s（主机日志 L2402-L2515），根因不明。增加状态变化即时日志 + 每 5s 心跳日志，26th 测试后根据日志确定具体修复方向（Prefix 未调用 / 条件未满足 / 返回值被覆盖）。不全局伪造 Dedicator.IsDedicatedServer。")]
+[assembly: AssemblyDescription("SteamP2PFriends v0.2.3.38 P2P-LIT 桥接版（Codex P0-LIT-02 R2 §3.1 授权实施）：在 OnServerHosted 完成 _server/_client 对齐 + serverTransport 非空守卫后、LoadClientHostedLevel 前调用 InitializeOptionalLITP2PFaultScope。该方法以软依赖方式反射发现 LaunchInventoryTidy v3.0.1 的 BeginScope(\"p2p\", map, slot) API，将 Stage6ASessionContext.CachedSlot 与 Provider.map 注入 LIT 作用域熔断隔离器。LIT 缺席：日志跳过、P2P 正常启动；LIT 已安装但作用域失败（Stage6A 上下文未稳定 / Listen Host 身份未对齐 / BeginScope 返回 false）：抛 InvalidOperationException，外层 OnServerHosted catch 触发 AbortHostStart 事务性回滚，房主启动 fail-closed 中止。SteamP2PFriends 不增加 LIT DLL 编译引用，仅运行时反射。")]
 [assembly: AssemblyCompany("YU80Rice")]
 [assembly: AssemblyProduct("SteamP2PFriends")]
 [assembly: AssemblyCopyright("MIT")]
 [assembly: ComVisible(false)]
 [assembly: Guid("b3c4d5e6-f7a8-9012-3456-789abcdef012")]
-[assembly: AssemblyVersion("0.2.3.37")]
-[assembly: AssemblyFileVersion("0.2.3.37")]
+[assembly: AssemblyVersion("0.2.3.38")]
+[assembly: AssemblyFileVersion("0.2.3.38")]
+// Stage 7-2-2（Codex 133rd §3）：纯单元测试项目 InternalsVisibleTo
+//   蓝图：仅此一项 InternalsVisibleTo 条目授权；测试项目不启动 Unturned、不触碰 Provider/Steam API/Unity/文件系统
+[assembly: InternalsVisibleTo("SteamP2PFriends.WhitelistTests")]

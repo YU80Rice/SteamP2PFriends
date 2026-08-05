@@ -98,6 +98,8 @@
     <Compile Include="Shared\Enums\EP2PLobbyState.cs" />
     <Compile Include="Shared\Enums\EJoinState.cs" />
     <Compile Include="Host\HostManager.cs" />
+    <Compile Include="Host\P2PWhitelistService.cs" />
+    <Compile Include="Host\P2PWhitelistModal.cs" />
     <Compile Include="Host\Stage6ASaveRoundtripObserver.cs" />
     <Compile Include="Host\Stage6BWorkshopSession.cs" />
     <Compile Include="Host\MasterBundleHashInitializer.cs" />

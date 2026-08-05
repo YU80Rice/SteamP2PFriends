@@ -15006,3 +15006,219 @@ if (shouldDisconnect)
 - §14.57（Codex 82nd 静态证据 v1.0 复核 + v1.1 返修授权）：单人 `isServer` 事实修正 + 主动保存方案永久废止 + `assertIsGameThread()` API 名修正 + 蓝图 v1.1 废止 + 蓝图 v1.2 当前有效
 - §14.58（Codex 83rd 保存观察器最小编码授权 + 编码实施）：被动观察器 `Stage6ASaveRoundtripObserver` + `Provider.disconnect` Finalizer + Survival 关卡守门 + 12 项编码门（v1 结论已失效）
 - **§14.59（Codex 84th 保存观察器 v1 定点返修 + v1.1 编码实施）**：P0-OBS-01 Finalizer try/catch 隔离 + P1-OBS-01 `IsStage6ANativeSaveObservationActive` 入口隔离 + 8 项机械验收门全部通过 + DLL SHA-256 `44D03B0C...659F` / 704,512 bytes / MVID `{76AC947D-DAD0-48AE-9EC0-8865B2DB6E22}`
+
+---
+
+## §14.119 Codex 第一百三十三次审计裁决 PASS + Stage 7-2-2 原生白名单最小编码实施（2026-08-05）
+
+**蓝图文档**：`D:\Agent-工作目录\.audit\phase7-static-audit\Codex-Blueprint-Stage7-2-2-NativeWhitelist-ImplementationCompile-v1-20260805.md`
+**设计文档**：`D:\Agent-工作目录\.audit\phase7-static-audit\Stage7-2-1-NativeWhitelistDesign-v1.md`（v1.5 Codex 132nd 接管蓝图回填）
+**实施报告**：`D:\Agent-工作目录\.audit\phase7-static-audit\Implementation-Stage7-2-2-NativeWhitelist-v1.md`
+
+### 14.119.1 核心裁决
+
+🟢 **Codex 133rd PASS** - 授权 Stage 7-2-2 最小 C# 实现 + 纯单元测试 + Release 编译。
+
+- 蓝图 §7 静态验收门 7/7 PASS（Stage 7-2-1 v1.5 设计文档满足 Codex 132nd 接管蓝图全部要求）
+- 授权范围严格限定：仅 C# 编码 + 纯单元测试 + Release 编译；**不部署、不启动、不动态测试、不分发**
+- Codex 132nd §4-§5 强制实现契约（三件套 seam / 故障锁存 / 失败收敛 / disconnect 唯一入口 / service 静态唯一）全部落实到代码
+
+### 14.119.2 代码变更清单
+
+#### 新建文件（2）
+
+| 文件 | 行数 | 职责 |
+|---|---|---|
+| `Host/P2PWhitelistService.cs` | ~440 | 三接口（`IWhitelistStore` / `IWhitelistRuntimeContext` / `IWhitelistDisconnectGateway`）+ 三生产实现（`NativeWhitelistStore` / `NativeWhitelistRuntimeContext` / `NativeWhitelistDisconnectGateway`）+ `internal static class P2PWhitelistService`（`ResetForP2PStart` / `ResetAfterP2PExit` / `TryBootstrap` / `CanManage` / `TryAdd` / `TryRemove` / `SnapshotForUi` + 测试 hook `InstallTestDependencies` 返回 `TestDependencyScope`） |
+| `Host/P2PWhitelistModal.cs` | ~210 | IMGUI 模态框：F8 切换；SteamID/tag 输入 + 添加/移除按钮 + 列表显示（steamID/tag/judgeID）；显示条件 `HostManager.IsP2PHostMode && Provider.isServer && Provider.isWhitelisted`；不引用 `SteamWhitelist.*` |
+
+#### 修改文件（4）
+
+| 文件 | 变更 |
+|---|---|
+| `Host/HostManager.cs` | (a) `PrepareClientHostSession()` 删除 `SteamWhitelist.load()`（保留 blacklist/adminlist）；(b) `StartP2PServer()` 在 `StartHostingCore()` 前接线 `P2PWhitelistService.ResetForP2PStart()` + `TryBootstrap(Provider.user, out failure)`（失败抛 `InvalidOperationException` 阻断开服）；(c) `AbortHostStart()` 外层 finally 加 `ResetAfterP2PExit()`（仅 `wasP2P` 守卫）；(d) `StopP2PServer()` 外层 finally 加 `ResetAfterP2PExit()`（仅 `wasP2P` 守卫）；(e) `StartLanServer()` 路径零 `P2PWhitelistService` 调用 |
+| `SteamP2PFriendsPlugin.cs` | `OnGUI()` 在 `DiagnosticBuildValid` / `EnableP2PCoop` 门后、既有 try/catch 内加 `P2PWhitelistModal.OnGUI()` |
+| `SteamP2PFriends.csproj` | 新增 2 个 Compile 项：`Host\P2PWhitelistService.cs` + `Host\P2PWhitelistModal.cs`（其他项不变） |
+| `Properties/AssemblyInfo.cs` | 仅新增 `[assembly: InternalsVisibleTo("SteamP2PFriends.WhitelistTests")]`（保留既有 v0.2.3.38 LIT 描述与版本） |
+
+#### 新建测试项目（5 文件）
+
+| 文件 | 职责 |
+|---|---|
+| `SteamP2PFriends.WhitelistTests/SteamP2PFriends.WhitelistTests.csproj` | .NET Framework 4.7.2 控制台测试项目；DLL 引用插件 + Libs；`<Private>True</Private>` |
+| `SteamP2PFriends.WhitelistTests/Program.cs` | 测试入口；13 项测试；返回 0（全过）或 1（失败） |
+| `SteamP2PFriends.WhitelistTests/WhitelistServiceTests.cs` | 7 大场景 13 个测试方法 |
+| `SteamP2PFriends.WhitelistTests/Fakes/FakeWhitelistStore.cs` | 可控失败模式 + 调用计数的 `IWhitelistStore` fake |
+| `SteamP2PFriends.WhitelistTests/Fakes/FakeWhitelistRuntimeContext.cs` | 不触碰 `ThreadUtil`/`Provider` 的 `IWhitelistRuntimeContext` fake |
+| `SteamP2PFriends.WhitelistTests/Fakes/FakeWhitelistDisconnectGateway.cs` | 仅记录调用次数的 `IWhitelistDisconnectGateway` fake |
+
+### 14.119.3 与蓝图的差异说明
+
+| 差异 | 原因 | 与蓝图一致性 |
+|---|---|---|
+| `IWhitelistRuntimeContext` 新增 `void SetWhitelisted(bool value);` 方法 | 蓝图 §3 要求测试不可触碰 `Provider`；`TryBootstrap` 需写 `Provider.isWhitelisted`，直接写会触发 `Provider` 静态构造违反蓝图。将 `Provider.isWhitelisted = value` 封装到 `NativeWhitelistRuntimeContext.SetWhitelisted()`，`TryBootstrap` 经 `_runtime.SetWhitelisted(...)` 调用 | 蓝图 §2.1 描述 `TryBootstrap` "仅全过才 `Provider.isWhitelisted=true`" 是生产行为契约；经 `SetWhitelisted` 实现后行为完全等价，是为测试可行性增加的 seam |
+| 测试项目使用 DLL 引用而非 ProjectReference | `SteamP2PFriends.csproj` 的 `ProjectGuid` 历史格式问题（最后一组 13 字符，应为 12），MSBuild 18 拒绝 ProjectReference；蓝图限制 `.csproj` 改动仅限"加入两个新增 Host 文件"，故不修正 ProjectGuid | 蓝图 §3 要求"不生成/写入任何游戏或存档文件"--复制 DLL 到测试输出目录是标准 .NET 部署，不生成游戏存档或 Unturned 文件系统文件 |
+| 测试项目 `<Private>True</Private>` | `SteamP2PFriends.dll` 传递依赖 BepInEx/0Harmony/UnityEngine 等；测试运行时 CLR 加载会触发依赖解析 | 蓝图 §3 一致性：标准 .NET 部署，不触碰游戏/存档 |
+
+### 14.119.4 编译与运行环境验证记录
+
+#### 插件 Release Rebuild
+
+| 项 | 值 |
+|---|---|
+| 命令 | `& 'C:\Program Files\Microsoft Visual Studio\18\Insiders\MSBuild\Current\Bin\MSBuild.exe' 'D:\...\SteamP2PFriends.csproj' /t:Rebuild /p:Configuration=Release /p:Platform=AnyCPU /m` |
+| MSBuild 版本 | 18.5.3+60a3d41e9 |
+| Errors | 0 |
+| Warnings | 18（全部为既有 `CS0612 ESteamPacket 已过时`，位于 `Patches/SteamChannelSendDiagnosticPatch.cs`，与 Stage 7-2-2 无关） |
+| Stage 7-2-2 新增代码警告 | 0 |
+| 耗时 | ~2s |
+
+#### 测试项目编译
+
+| 项 | 值 |
+|---|---|
+| 命令 | `MSBuild SteamP2PFriends.WhitelistTests.csproj /t:Rebuild /p:Configuration=Release /p:Platform=AnyCPU /m` |
+| Errors | 0 |
+| Warnings | 0 |
+| 输出 | `SteamP2PFriends.WhitelistTests.exe` + 依赖 DLL |
+
+#### 纯单元测试运行（13/13 PASS）
+
+```
+=== SteamP2PFriends.WhitelistTests (Stage 7-2-2) ===
+[ 1] 1. Bootstrap_Success                                         ... PASS
+[ 2] 2a. Bootstrap_SaveFailure_NoDisconnect                       ... PASS
+[ 3] 2b. Bootstrap_LoadFailure_NoDisconnect                       ... PASS
+[ 4] 2c. Bootstrap_ContainsFailure_NoDisconnect                   ... PASS
+[ 5] 3a. Add_SaveFailure_GatewayOnce                              ... PASS
+[ 6] 3b. Add_LoadFailure_GatewayOnce                              ... PASS
+[ 7] 3c. Add_ContainsFailure_GatewayOnce                          ... PASS
+[ 8] 4a. Remove_SaveFailure_GatewayOnce                           ... PASS
+[ 9] 4b. Remove_NoOp_NoSave_NoDisconnect                          ... PASS
+[10] 5a. Add_Self_Rejected                                        ... PASS
+[11] 5b. Remove_Self_Rejected                                     ... PASS
+[12] 6. Add_JudgeId_Equals_LocalUser                              ... PASS
+[13] 7. PersistenceFault_Blocks_Second_Mutate_And_Reset_Restores  ... PASS
+
+=== Total: 13 / Passed: 13 / Failed: 0 ===
+```
+
+退出码：0（全过）
+
+#### 最终 DLL 产物身份
+
+| 项 | 值 |
+|---|---|
+| DLL 路径 | `D:\Agent-工作目录\DevelopMyUNMultiplayerModAndModloader\SteamP2PFriends\bin\Release\SteamP2PFriends.dll` |
+| 文件大小 | 729,088 bytes（较 v0.2.3.37 的 717,312 bytes 增加 11,776 bytes，符合新增 P2PWhitelistService + P2PWhitelistModal 代码量） |
+| SHA-256 | `ECB8431AEE6B2248EC37D90C1146EB59B2C77BB887015FA7C7F4870E6099A3E8` |
+| AssemblyVersion | 0.2.3.38 |
+| AssemblyFileVersion | 0.2.3.38 |
+| BepInPlugin version | 0.2.3.38（GUID `com.yu80rice.steamp2pfriends`） |
+| MVID | `d7e7448a-36d3-4bff-b90b-7f813104e085` |
+
+### 14.119.5 静态门验证（6 项全部 PASS）
+
+| # | 静态门 | 验证方法 | 结果 |
+|---|---|---|---|
+| 1 | `SteamWhitelist.*` 只在 `NativeWhitelistStore`；零 `_list` | `grep -rn "SteamWhitelist\.\(load\|save\|whitelist\|unwhitelist\|checkWhitelisted\|list\)" Host/ Client/ Patches/ SteamP2PFriendsPlugin.cs` | ✅ PASS - 所有调用仅在 `P2PWhitelistService.cs:63-84`（`NativeWhitelistStore`）；零处访问 `SteamWhitelist._list` |
+| 2 | `Provider.disconnect()` 只在 `NativeWhitelistDisconnectGateway` 白名单路径 | `grep -rn "Provider\.disconnect()" Host/P2PWhitelistService.cs` | ✅ PASS - 仅在 `P2PWhitelistService.cs:120`（`NativeWhitelistDisconnectGateway.DisconnectCurrentP2PHost()`）；既有调用点（`HostManager.cs:1056` / `Client/P2PJoinManager.cs:113,168`）不属白名单 feature 且未修改 |
+| 3 | service 为唯一 static；无 `new P2PWhitelistService()` | `grep -rn "new P2PWhitelistService\|class P2PWhitelistService" Host/` | ✅ PASS - `P2PWhitelistService.cs:128` 声明 `internal static class`；零处 `new P2PWhitelistService()` |
+| 4 | LAN 路径无 bootstrap/service 调用 | 检查 `StartLanServer()` 第 271 行起 | ✅ PASS - `ResetForP2PStart`/`TryBootstrap`/`ResetAfterP2PExit` 仅在 P2P 路径；`StartLanServer()` 零 `P2PWhitelistService` 调用 |
+| 5 | `Provider.host()` 仍只由既有 `StartHostingCore()` 调用 | `grep -n "Provider\.host()" Host/HostManager.cs` | ✅ PASS - 实际调用仅在 `StartHostingCore()` 第 367 行；其他匹配均为注释或日志字符串 |
+| 6 | Bootstrap 在 `StartHostingCore()` 之前；`ResetAfterP2PExit` 在外层 finally | 检查 `StartP2PServer` / `AbortHostStart` / `StopP2PServer` | ✅ PASS - `ResetForP2PStart`+`TryBootstrap` 在 `StartHostingCore()` 前（第 216/218 行 vs 第 367 行）；`ResetAfterP2PExit` 在 `AbortHostStart`（第 1110 行）+ `StopP2PServer`（第 1230 行）外层 finally，均 `if (wasP2P)` 守卫 |
+
+**6/6 静态门全部通过**。
+
+### 14.119.6 单元测试 7 大场景覆盖
+
+| 场景 | 测试方法 | 验证点 |
+|---|---|---|
+| 1. Bootstrap 成功 | `Test_Bootstrap_Success` | Load -> AddOrUpdate(host) -> Save -> Load -> Contains(host) 全过；`Provider.isWhitelisted=true`；无 disconnect |
+| 2a-c. Bootstrap 失败不 disconnect | `Test_Bootstrap_SaveFailure_NoDisconnect` / `LoadFailure_NoDisconnect` / `ContainsFailure_NoDisconnect` | 任一步失败：`Provider.isWhitelisted=false`；disconnect 调用 0 次；`_persistenceFaulted=true` |
+| 3a-c. Add 失败 gateway exactly once | `Test_Add_SaveFailure_GatewayOnce` / `LoadFailure_GatewayOnce` / `ContainsFailure_GatewayOnce` | snapshot -> mutate -> Save/Load/Contains 失败 -> Restore -> disconnect 1 次；第二次 Add 被 `_persistenceFaulted` 拦截 |
+| 4a. Remove Save 失败 gateway once | `Test_Remove_SaveFailure_GatewayOnce` | Save 失败 -> Restore -> disconnect 1 次 |
+| 4b. Remove no-op 不 Save 不 disconnect | `Test_Remove_NoOp_NoSave_NoDisconnect` | `Contains=false` -> 直接返回；Save 0 次；disconnect 0 次 |
+| 5a-b. Add/Remove 自身被拒 | `Test_Add_Self_Rejected` / `Test_Remove_Self_Rejected` | `target == LocalUser` -> 直接返回 false；不 Snapshot / Save / disconnect |
+| 6. JudgeID = LocalUser | `Test_Add_JudgeId_Equals_LocalUser` | AddOrUpdate 收到 `judgeId == fake runtime LocalUser` |
+| 7. 故障锁存 + Reset 恢复 | `Test_PersistenceFault_Blocks_Second_Mutate_And_Reset_Restores` | 第一次 Add 失败 -> `_persistenceFaulted=true`；第二次 Add 直接返回 false；`ResetForP2PStart` 后 `_persistenceFaulted=false`，Add 恢复成功 |
+
+### 14.119.7 当前授权边界
+
+| 项目 | 裁决 |
+|---|---|
+| Stage 7-2-2 C# 编码 + 纯单元测试 + Release 编译 | 🟢 已完成 |
+| Stage 7-2-2 实施报告 v1 落盘 | 🟢 已完成 |
+| AUDIT_CHECKLIST §14.119 登记 | 🟢 已完成（本节） |
+| DLL 部署到 BepInEx/plugins | 🔴 继续禁止 |
+| 启动 Unturned / 单机冒烟 S0 | 🔴 继续禁止 |
+| P2P allow/reject 动态测试 | 🔴 继续禁止（须 Codex 134th PASS 后单独申请） |
+| LAN 动态测试 | 🔴 继续禁止 |
+| Workshop 测试 | 🔴 继续禁止 |
+| 迁移工具 | 🔴 继续禁止 |
+| 认证测试 | 🔴 继续禁止 |
+| 修改 `SteamWhitelist` 原生类 | 🔴 永久禁止 |
+| 生产代码访问 `SteamWhitelist._list` | 🔴 永久禁止 |
+| 在 `IWhitelistStore` 之外直接调用 `SteamWhitelist.load/save/whitelist/unwhitelist/checkWhitelisted` | 🔴 永久禁止 |
+| 在 `IWhitelistDisconnectGateway` 之外直接调用 `Provider.disconnect()` 作为白名单终止入口 | 🔴 永久禁止 |
+| `P2PWhitelistService` 设计为实例类 | 🔴 永久禁止（必须 `static class`） |
+| 手工破坏存档/权限制造失败 | 🔴 永久禁止 |
+| 正式版发布 | 🔴 继续禁止 |
+
+### 14.119.8 风险与副作用评估
+
+| 风险类别 | 评估 |
+|---|---|
+| 存档系统 | `SteamWhitelist.load()` 从 `PrepareClientHostSession()` 删除后，P2P 启动不再预先加载白名单磁盘文件；改由 `TryBootstrap` 内部 `Load -> AddOrUpdate(host) -> Save -> Load -> Contains` 链路在 `StartHostingCore()` 之前完成加载。失败时 `Provider.isWhitelisted=false` + 不 disconnect，开服抛 `InvalidOperationException` 阻断，不会留下半完成状态 |
+| 网络同步 | 白名单变更（Add/Remove）经 `SteamWhitelist.save()` 持久化，原版 `Provider.isWhitelisted` 守卫客机 join 路径；disconnect 由 `IWhitelistDisconnectGateway` 唯一出口调用，不与既有 `HostManager.AbortHostStart` / `P2PJoinManager` 既有 disconnect 冲突 |
+| UI 响应 | `P2PWhitelistModal` 仅在 `HostManager.IsP2PHostMode && Provider.isServer && Provider.isWhitelisted` 时绘制；F8 切换；不阻塞游戏主循环；失败反馈 5 秒淡出 |
+| LAN 模式 | `StartLanServer` 零 `P2PWhitelistService` 调用，LAN 不触发白名单 bootstrap / reset，LAN 的 `Provider.isWhitelisted` 状态由原版路径管理 |
+| 第二局会话复用 | `ResetAfterP2PExit` 在 `AbortHostStart` + `StopP2PServer` 外层 finally 由 `wasP2P` 守卫调用，确保退出 P2P 后 `_persistenceFaulted` 清零、`Provider.isWhitelisted=false`，下次 P2P 启动可重新 bootstrap |
+| 测试 hook 残留 | `InstallTestDependencies` 返回 `TestDependencyScope`，`Dispose` 时恢复生产实现；生产代码默认使用 `NativeWhitelistStore` / `NativeWhitelistRuntimeContext` / `NativeWhitelistDisconnectGateway`，测试 hook 不影响生产行为 |
+
+### 14.119.9 测试用例与建议（供 Codex 134th 实现审计）
+
+#### 静态审计门（Codex 134th 优先核对）
+
+1. **三件套 seam 完整性**：`IWhitelistStore` / `IWhitelistRuntimeContext` / `IWhitelistDisconnectGateway` 接口定义与蓝图 §2.1 一致（`IWhitelistRuntimeContext` 多出 `SetWhitelisted` 是为测试可行性的 seam，生产行为等价）
+2. **`SteamWhitelist.*` 调用收敛**：grep 验证 `SteamWhitelist.load/save/whitelist/unwhitelist/checkWhitelisted/list` 实际调用仅在 `NativeWhitelistStore`；零处访问 `SteamWhitelist._list`
+3. **`Provider.disconnect()` 唯一入口**：grep 验证 `Provider.disconnect()` 在白名单路径仅在 `NativeWhitelistDisconnectGateway.DisconnectCurrentP2PHost()`；`P2PWhitelistService` 经 `_disconnect.DisconnectCurrentP2PHost()` 接口调用
+4. **service 静态唯一**：`P2PWhitelistService` 声明为 `internal static class`；零处 `new P2PWhitelistService()`
+5. **故障锁存**：`_persistenceFaulted` 在 Add/Remove 失败路径置 true；后续 mutate 在入口检查并直接返回 false；`ResetForP2PStart` 清零
+6. **失败收敛模板**：snapshot -> mutate -> Save -> Load -> postcondition；失败时 Restore snapshot；disconnect 在锁外、最多一次
+7. **bootstrap 时机**：`ResetForP2PStart` + `TryBootstrap` 在 `StartHostingCore()` 之前；失败抛 `InvalidOperationException` 阻断开服
+8. **reset 时机**：`ResetAfterP2PExit` 在 `AbortHostStart` + `StopP2PServer` 外层 finally，`wasP2P` 守卫
+9. **LAN 隔离**：`StartLanServer` 零 `P2PWhitelistService` 调用
+10. **Modal 显示条件**：`P2PWhitelistModal.OnGUI` 首行 `!IsP2PHostMode || !Provider.isServer || !Provider.isWhitelisted` 早返回
+
+#### 单元测试 13 项（已全过，Codex 134th 可重跑验证）
+
+- 测试入口：`SteamP2PFriends.WhitelistTests.exe`（位于 `SteamP2PFriends.WhitelistTests\bin\Release\`）
+- 退出码：0（全过）或 1（失败）
+- 13 项覆盖蓝图 §3 全部 7 大场景
+
+### 14.119.10 最终停止点
+
+- 🟢 Stage 7-2-2 C# 编码完成（`P2PWhitelistService.cs` + `P2PWhitelistModal.cs`）
+- 🟢 HostManager 接线完成（删 `SteamWhitelist.load()` + bootstrap 前 `StartHostingCore()` + reset 外层 finally）
+- 🟢 Plugin OnGUI 接 `P2PWhitelistModal.OnGUI()`
+- 🟢 csproj 新增 2 个 Compile 项
+- 🟢 AssemblyInfo 新增 `InternalsVisibleTo`
+- 🟢 纯单元测试项目 13/13 PASS
+- 🟢 Release 编译 0 errors / 18 既有 warnings / 0 新增 warnings
+- 🟢 6 项静态门全部 PASS
+- 🟢 实施报告 v1 落盘
+- 🟢 AUDIT_CHECKLIST §14.119 登记（本节）
+- 🔴 DLL 部署、启动 Unturned、P2P/单人/LAN 动态测试、Workshop、迁移、认证、正式 Beta 发布继续冻结
+- ⏸️ 等待 Codex 134th 实现审计裁决
+
+**下一步**：
+1. 提交 Codex 134th 实现审计（提交物：实施报告 v1 + §14.119 登记 + DLL 产物身份 + 13 项单元测试日志 + 6 项静态门证据）
+2. Codex 134th PASS 后，可单独申请最小 DLL 部署与 P2P allow/reject 动态测试授权
+3. 动态测试通过后，可申请扩展封闭 α 兼容包（含 whitelist）授权
+4. 认证改造主线重启须等 Stage 7-2-3 动态测试通过
+
+### 14.119.11 当前有效规范更新
+
+- §14.113-§14.118（Codex 125th-132nd）：Stage 7-2-1 设计文档 v1.0 -> v1.5 演进
+- **§14.119（Codex 133rd PASS + Stage 7-2-2 编码实施）**：三件套 seam + 故障锁存 + 失败收敛 + disconnect 唯一入口 + service 静态唯一 + 6 项静态门全过 + 13/13 单元测试全过 + DLL SHA-256 `ECB8431A...A3E8` / 729,088 bytes / MVID `d7e7448a-36d3-4bff-b90b-7f813104e085`

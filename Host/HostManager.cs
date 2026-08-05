@@ -209,6 +209,15 @@ namespace SteamP2PFriends.Host
                 Provider.onEnemyConnected += OnPlayerConnectedToServer;
                 RoleLogger.Info("[Host]", "已订阅 Provider.onEnemyConnected");
 
+                // Stage 7-2-2（Codex 133rd §2.3）：P2P 白名单 bootstrap
+                //   蓝图强制时序：所有既有前置成功后、紧接 StartHostingCore() 前。
+                //   bootstrap 失败抛 InvalidOperationException -> 外层 catch -> AbortHostStart 收敛。
+                //   bootstrap 失败不调 Provider.disconnect()（设计 §4.3）。
+                P2PWhitelistService.ResetForP2PStart();
+                string whitelistFailure;
+                if (!P2PWhitelistService.TryBootstrap(Provider.user, out whitelistFailure))
+                    throw new InvalidOperationException("P2P whitelist bootstrap failed: " + whitelistFailure);
+
                 StartHostingCore();
 
                 if (!_isStarting) return;  // AbortHostStart 已回滚
@@ -459,6 +468,12 @@ namespace SteamP2PFriends.Host
                         throw new InvalidOperationException("Stage6B server mapping rejected: " + stage6BFailure);
                 }
 
+                // Codex P0-LIT-02 R2 §3.1：在 _server/_client 对齐 + serverTransport 非空守卫后、
+                //   LoadClientHostedLevel 前，反射调用 LIT BeginScope("p2p", map, slot)。
+                //   LIT 缺席：日志跳过；LIT 已安装但作用域失败：抛异常走外层 catch -> AbortHostStart。
+                if (_hostMode == EHostMode.P2P)
+                    InitializeOptionalLITP2PFaultScope();
+
                 // B 方：主动加载地图（根治客机进度条卡死）
                 LoadClientHostedLevel();
 
@@ -497,6 +512,108 @@ namespace SteamP2PFriends.Host
                 RoleLogger.Error("[Host]", $"OnServerHosted failed: {ex}");
                 AbortHostStart("主机加载地图失败，请查看日志。");
             }
+        }
+
+        /// <summary>
+        /// Codex P0-LIT-02 R2 §3.1：可选 LIT P2P 作用域熔断桥接。
+        ///
+        /// 调用时机：OnServerHosted 内，_server/_client 已对齐到 Provider.user、serverTransport 非空、
+        /// Stage6B workshop mapping 完成、LoadClientHostedLevel 调用前。
+        ///
+        /// 行为契约：
+        ///   - LIT 未安装：日志 Info "[LIT] not installed; P2P fault scope bridge skipped." 后正常返回，P2P 继续启动。
+        ///   - LIT 已安装但 Stage6A 上下文未稳定 / Listen Host 身份未对齐 / Provider.map 为空 /
+        ///     BeginScope API 缺失或签名不匹配 / BeginScope 返回 false：抛 InvalidOperationException，
+        ///     由外层 OnServerHosted catch 捕获并调用 AbortHostStart，房主启动 fail-closed 中止。
+        ///   - LIT 已安装且 BeginScope 返回 true：日志 Info "[LIT] P2P fault scope ready: ..."，P2P 继续启动。
+        ///
+        /// 反射契约：
+        ///   - 仅按 AppDomain 程序集名 "LaunchInventoryTidy" 发现 LIT 类型，不增加编译时引用。
+        ///   - 仅调用公共静态方法 BeginScope(string mode, string mapName, int saveSlot) -> bool。
+        ///   - LIT 内部不感知 SteamP2PFriends 类型，所有 P2P 上下文由本方法注入。
+        /// </summary>
+        private static void InitializeOptionalLITP2PFaultScope()
+        {
+            if (_hostMode != EHostMode.P2P)
+                return;
+
+            if (!Stage6ASessionContext.IsActive ||
+                Stage6ASessionContext.HostMode != EHostMode.P2P ||
+                Stage6ASessionContext.CachedSlot < 0 ||
+                Stage6ASessionContext.CachedSlot > 4)
+                throw new InvalidOperationException(
+                    "LIT scope rejected: Stage6A P2P context is not stable.");
+
+            if (!Provider.isServer || !Provider.isClient ||
+                Provider.server == CSteamID.Nil ||
+                Provider.client == CSteamID.Nil ||
+                Provider.server != Provider.client)
+                throw new InvalidOperationException(
+                    "LIT scope rejected: Listen Host identity is not stable.");
+
+            string mapName = Provider.map;
+            if (string.IsNullOrWhiteSpace(mapName))
+                throw new InvalidOperationException(
+                    "LIT scope rejected: Provider.map is empty.");
+
+            Type litType = null;
+            foreach (Assembly assembly in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                if (!string.Equals(
+                        assembly.GetName().Name,
+                        "LaunchInventoryTidy",
+                        StringComparison.Ordinal))
+                    continue;
+
+                litType = assembly.GetType(
+                    "LaunchInventoryTidy.LaunchInventoryTidyPlugin",
+                    false);
+                break;
+            }
+
+            if (litType == null)
+            {
+                RoleLogger.Info("[Host]",
+                    "[LIT] not installed; P2P fault scope bridge skipped.");
+                return;
+            }
+
+            MethodInfo beginScope = litType.GetMethod(
+                "BeginScope",
+                BindingFlags.Public | BindingFlags.Static,
+                null,
+                new[] { typeof(string), typeof(string), typeof(int) },
+                null);
+
+            if (beginScope == null || beginScope.ReturnType != typeof(bool))
+                throw new InvalidOperationException(
+                    "LIT scope bridge rejected: required BeginScope API is unavailable.");
+
+            object invoked;
+            try
+            {
+                invoked = beginScope.Invoke(null, new object[]
+                {
+                    "p2p",
+                    mapName,
+                    Stage6ASessionContext.CachedSlot
+                });
+            }
+            catch (TargetInvocationException ex)
+            {
+                throw new InvalidOperationException(
+                    "LIT scope bridge threw an exception.",
+                    ex.InnerException ?? ex);
+            }
+
+            if (!(invoked is bool) || !((bool)invoked))
+                throw new InvalidOperationException(
+                    "LIT scope bridge returned failure; host start is aborted fail-closed.");
+
+            RoleLogger.Info("[Host]",
+                "[LIT] P2P fault scope ready: map=" + mapName +
+                " slot=" + Stage6ASessionContext.CachedSlot +
+                " steamId=" + Provider.server.m_SteamID);
         }
 
         /// <summary>
@@ -656,12 +773,14 @@ namespace SteamP2PFriends.Host
             ReflectionUtil.SetStaticField(providerType, "isThirdpartyAntiCheatActive", false);
             ReflectionUtil.SetStaticField(providerType, "_currentServerAdvertisement", null);
 
-            SteamWhitelist.load();
+            // Stage 7-2-2（Codex 133rd §2.3）：删除 SteamWhitelist.load()；
+            //   白名单初始化移交 P2PWhitelistService.TryBootstrap() 经 IWhitelistStore.Load() 完成。
+            //   SteamBlacklist/Adminlist.load() 保留。
             SteamBlacklist.load();
             SteamAdminlist.load();
             PlayerInventory.skillsets = PlayerInventory.SKILLSETS_CLIENT;
 
-            RoleLogger.Info("[Host]", "[P2P] PrepareClientHostSession 完成（ConfigData + LoadGameplayConfig + ModeConfig + Whitelist/Blacklist/Adminlist）");
+            RoleLogger.Info("[Host]", "[P2P] PrepareClientHostSession 完成（ConfigData + LoadGameplayConfig + ModeConfig + Blacklist/Adminlist；Whitelist 经 P2PWhitelistService.TryBootstrap）");
         }
 
         private static void ConfigureCommonServerSettings(LevelInfo level, EGameMode gameMode, byte maxPlayers, bool cheats)
@@ -983,6 +1102,17 @@ namespace SteamP2PFriends.Host
                     if (!TryCleanupStage6BForExit(out stage6BFailure))
                         RoleLogger.Error("[Host]", "[Stage6B] exit cleanup failed: " + stage6BFailure);
                 }
+                // Stage 7-2-2（Codex 133rd §2.3）：P2P 退出后清理 service 运行时状态
+                //   蓝图 §4.5：仅清 _persistenceFaulted 等；不清空/不保存 SteamWhitelist.list
+                //   蓝图 §2.3：LAN 路径不得调用 service，故仅 wasP2P 时调用
+                if (wasP2P)
+                {
+                    try { P2PWhitelistService.ResetAfterP2PExit(); }
+                    catch (Exception wlEx)
+                    {
+                        RoleLogger.Error("[Host]", "[P2P-WL] ResetAfterP2PExit (Abort) 异常（不阻断）: " + wlEx);
+                    }
+                }
             }
         }
 
@@ -1091,6 +1221,17 @@ namespace SteamP2PFriends.Host
                     string stage6BFailure;
                     if (!TryCleanupStage6BForExit(out stage6BFailure))
                         RoleLogger.Error("[Host]", "[Stage6B] exit cleanup failed: " + stage6BFailure);
+                }
+                // Stage 7-2-2（Codex 133rd §2.3）：P2P 退出后清理 service 运行时状态
+                //   蓝图 §4.5：仅清 _persistenceFaulted 等；不清空/不保存 SteamWhitelist.list
+                //   蓝图 §2.3：LAN 路径不得调用 service，故仅 wasP2P 时调用
+                if (wasP2P)
+                {
+                    try { P2PWhitelistService.ResetAfterP2PExit(); }
+                    catch (Exception wlEx)
+                    {
+                        RoleLogger.Error("[Host]", "[P2P-WL] ResetAfterP2PExit (Stop) 异常（不阻断）: " + wlEx);
+                    }
                 }
             }
         }

@@ -29,7 +29,8 @@ namespace SteamP2PFriends
     ///   - 不以 Accepted + clients + bitmask 直接宣告真实 GameplayReady
     ///   - watchdog 超时不调 Provider.disconnect / RequestDisconnect
     /// </summary>
-    [BepInPlugin("com.yu80rice.steamp2pfriends", "SteamP2PFriends", "0.2.3.37")]
+    [BepInPlugin("com.yu80rice.steamp2pfriends", "SteamP2PFriends", "0.2.3.38")]
+    [BepInDependency("com.yu80rice.launchinventorytidy", BepInDependency.DependencyFlags.SoftDependency)]
     public class SteamP2PFriendsPlugin : BaseUnityPlugin
     {
         public const string HARMONY_ID = "com.yu80rice.steamp2pfriends";
@@ -641,6 +642,9 @@ namespace SteamP2PFriends
             {
                 HostSteamIdDisplayService.OnGUI();
                 SteamIdInputModal.OnGUI();
+                // Stage 7-2-2（Codex 133rd §2.4）：白名单管理 UI
+                //   蓝图：DiagnosticBuildValid / EnableP2PCoop 门后调用；异常沿用现有 catch/log 风格
+                P2PWhitelistModal.OnGUI();
             }
             catch (System.Exception ex)
             {
