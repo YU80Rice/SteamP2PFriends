@@ -49,6 +49,7 @@ namespace SteamP2PFriends.Patches
             [HarmonyPrefix]
             public static void Prefix(ITransportConnection transportConnection)
             {
+                P2PQuarantineReadyToConnectScope.Enter(transportConnection);
                 if (HostManager.HostMode == EHostMode.LAN)
                 {
                     HostManager.BeginLanJoinDuplicateCheckBypass();
@@ -59,7 +60,14 @@ namespace SteamP2PFriends.Patches
             [HarmonyFinalizer]
             public static void Finalizer()
             {
-                HostManager.EndLanJoinDuplicateCheckBypass();
+                try
+                {
+                    HostManager.EndLanJoinDuplicateCheckBypass();
+                }
+                finally
+                {
+                    P2PQuarantineReadyToConnectScope.Exit();
+                }
             }
         }
 

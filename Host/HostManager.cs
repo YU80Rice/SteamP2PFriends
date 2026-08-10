@@ -4,6 +4,7 @@ using SDG.Unturned;
 using SteamP2PFriends.Patches;
 using SteamP2PFriends.Shared;
 using SteamP2PFriends.Shared.Enums;
+using SteamP2PFriends.UI;
 using Steamworks;
 using System;
 using System.Collections.Generic;
@@ -45,6 +46,7 @@ namespace SteamP2PFriends.Host
 
         private static bool _isStarting;
         private static EHostMode _hostMode = EHostMode.None;
+        private static P2PRoomRules _activeRoomRules;
 
         public static bool IsP2PServerActive { get; private set; }
         public static bool SteamReadyHandled { get; private set; }
@@ -91,7 +93,8 @@ namespace SteamP2PFriends.Host
         /// <summary>
         /// 启动 P2P Listen Server（由 MenuPlaySingleplayerUIPatch 调用）。
         /// </summary>
-        public static void StartP2PServer(string mapName, string serverName, byte maxPlayers, EGameMode mode, bool cheats)
+        public static void StartP2PServer(string mapName, string serverName, byte maxPlayers, EGameMode mode,
+            bool cheats, P2PRoomRules roomRules = null)
         {
             // v0.2.3.23 P0-C4：DiagnosticBuildValid 硬门控
             //   审计报告-Codex §3 P0-Critical-4 要求：HostManager.StartP2PServer 开头硬检查
@@ -147,6 +150,7 @@ namespace SteamP2PFriends.Host
                     RemotePlayerRenderProbe.ResetAll();
                     // v0.2.3.27 P0-A：WorldSyncDiagnosticCore 世界同步诊断计数清零（第二局开服重置）
                     Patches.WorldSyncDiagnosticCore.ResetAll();
+                    Patches.P2PListenHostCommandPermissionPatch.ResetForSession();
                 }
                 catch (System.Exception ex)
                 {
@@ -160,6 +164,7 @@ namespace SteamP2PFriends.Host
                 }
 
                 ResetHostSession();
+                _activeRoomRules = roomRules;
 
                 // B 方 ConfigureCommonServerSettings；测试版固定 SteamUser P2P-only
                 ConfigureCommonServerSettings(level, mode, maxPlayers, cheats);
@@ -217,6 +222,14 @@ namespace SteamP2PFriends.Host
                 string whitelistFailure;
                 if (!P2PWhitelistService.TryBootstrap(Provider.user, out whitelistFailure))
                     throw new InvalidOperationException("P2P whitelist bootstrap failed: " + whitelistFailure);
+
+                // Stage 7-3 v2 §4.7：P2P 会话开始前清空待审批/抑制集合/UI 状态
+                try { P2PJoinApprovalService.ResetForSession(); }
+                catch (Exception apEx) { RoleLogger.Warn("[Host]", "[P2P-Approval] ResetForSession 异常（不阻断）: " + apEx); }
+                try { P2PQuarantineAdmissionService.ResetForSession(); }
+                catch (Exception qEx) { RoleLogger.Warn("[Host]", "[P2P-Quarantine] ResetForSession 异常（不阻断）: " + qEx); }
+                try { SteamPersonaDisplay.ResetForSession(); }
+                catch (Exception nameEx) { RoleLogger.Warn("[Host]", "[P2P-Persona] ResetForSession 异常（不阻断）: " + nameEx.GetType().Name); }
 
                 StartHostingCore();
 
@@ -499,7 +512,7 @@ namespace SteamP2PFriends.Host
                     PublishP2PRichPresence();
                     RoleLogger.Info("[Host]",
                         $"!!! 房主 SteamUser SteamID = {GetLocalSteamIdString()} !!! " +
-                        $"(客机请用此 ID 通过 SteamIdInputModal 直连)");
+                        $"(客机请用此 ID 通过 P2P 多人联机菜单 -> 作为客机 -> 请求加入)");
                 }
                 else if (_hostMode == EHostMode.LAN)
                 {
@@ -768,6 +781,8 @@ namespace SteamP2PFriends.Host
                 modeConfig.InitSingleplayerDefaults();
             }
 
+            ApplyP2PRoomRules(modeConfig, _activeRoomRules);
+
             ReflectionUtil.SetStaticField(providerType, "_modeConfigData", modeConfig);
             ReflectionUtil.SetStaticField(providerType, "isVacActive", false);
             ReflectionUtil.SetStaticField(providerType, "isThirdpartyAntiCheatActive", false);
@@ -790,7 +805,7 @@ namespace SteamP2PFriends.Host
             Provider.maxPlayers = maxPlayers;
             Provider.queueSize = (byte)Math.Max(8, maxPlayers * 2);
             Provider.serverPassword = string.Empty;
-            Provider.isPvP = true;
+            Provider.isPvP = _activeRoomRules == null || _activeRoomRules.EnablePvp;
             Provider.isWhitelisted = false;
             Provider.hideAdmins = false;
             Provider.hasCheats = cheats;
@@ -800,6 +815,18 @@ namespace SteamP2PFriends.Host
             Provider.gameMode = null;
             Provider.cameraMode = ECameraMode.BOTH;
             Commander.init();
+        }
+
+        private static void ApplyP2PRoomRules(ModeConfigData modeConfig, P2PRoomRules rules)
+        {
+            if (modeConfig == null || rules == null) return;
+
+            rules.ApplyTo(modeConfig);
+
+            RoleLogger.Info("[Host]", "[RoomRules] pvp=" + rules.EnablePvp +
+                " keepInventory=" + rules.KeepInventoryOnDeath +
+                " keepSkills=" + rules.KeepSkillsOnDeath +
+                " keepExperience=" + rules.KeepExperienceOnDeath);
         }
 
         /// <summary>
@@ -1019,6 +1046,7 @@ namespace SteamP2PFriends.Host
                     IsP2PServerActive = false;
                 SteamReadyHandled = false;
                 _hostMode = EHostMode.None;
+                _activeRoomRules = null;
 
                 // v0.2.3.37 P0-B-6：重置预生成标志位（Codex 第二十五次审计 §4.1 Low 项补充）
                 //   启动失败回滚后，下次开服允许 P0-B-6 重新执行
@@ -1029,6 +1057,15 @@ namespace SteamP2PFriends.Host
                 catch (Exception ex)
                 {
                     RoleLogger.Error("[Host]", $"[P0-B-6] ResetRegenerationFlag (Abort) 异常（不阻断）: {ex}");
+                }
+
+                try
+                {
+                    Patches.AuthoritativeItemGenerationGatePatch.ResetForSession();
+                }
+                catch (Exception ex)
+                {
+                    RoleLogger.Error("[Host]", $"[ItemAuthorityGate] ResetForSession (Abort) failed: {ex.Message}");
                 }
 
                 UnsubscribeAll();
@@ -1112,6 +1149,13 @@ namespace SteamP2PFriends.Host
                     {
                         RoleLogger.Error("[Host]", "[P2P-WL] ResetAfterP2PExit (Abort) 异常（不阻断）: " + wlEx);
                     }
+                    // Stage 7-3 v2 §4.7：P2P 会话退出后清空待审批/UI 状态
+                    try { P2PJoinApprovalService.ResetAfterSession(); }
+                    catch (Exception apEx) { RoleLogger.Warn("[Host]", "[P2P-Approval] ResetAfterSession (Abort) 异常（不阻断）: " + apEx); }
+                    try { P2PQuarantineAdmissionService.ResetForSession(); }
+                    catch (Exception qEx) { RoleLogger.Warn("[Host]", "[P2P-Quarantine] ResetAfterSession (Abort) 异常（不阻断）: " + qEx); }
+                    try { SteamPersonaDisplay.ResetAfterSession(); }
+                    catch (Exception nameEx) { RoleLogger.Warn("[Host]", "[P2P-Persona] ResetAfterSession (Abort) 异常（不阻断）: " + nameEx.GetType().Name); }
                 }
             }
         }
@@ -1131,9 +1175,19 @@ namespace SteamP2PFriends.Host
                 SteamReadyHandled = false;
                 IsP2PServerActive = false;
                 _hostMode = EHostMode.None;
+                _activeRoomRules = null;
                 _listenTickCount = 0;
                 _loggedListenActive = false;
                 _lastListenHeartbeatTime = 0f;
+
+                try
+                {
+                    Patches.AuthoritativeItemGenerationGatePatch.ResetForSession();
+                }
+                catch (Exception ex)
+                {
+                    RoleLogger.Error("[Host]", $"[ItemAuthorityGate] ResetForSession (Stop) failed: {ex.Message}");
+                }
 
                 // Stage 6A（Codex 79th §1）：Stop 真实 P2P 会话结束时 End + Reset
                 // v0.2.3.40 Stage 6A-1（Codex 83rd §3.2 #3 + #11）：嵌套 finally，Complete 必须在 Reset 之前；
@@ -1232,6 +1286,13 @@ namespace SteamP2PFriends.Host
                     {
                         RoleLogger.Error("[Host]", "[P2P-WL] ResetAfterP2PExit (Stop) 异常（不阻断）: " + wlEx);
                     }
+                    // Stage 7-3 v2 §4.7：P2P 会话退出后清空待审批/UI 状态
+                    try { P2PJoinApprovalService.ResetAfterSession(); }
+                    catch (Exception apEx) { RoleLogger.Warn("[Host]", "[P2P-Approval] ResetAfterSession (Stop) 异常（不阻断）: " + apEx); }
+                    try { P2PQuarantineAdmissionService.ResetForSession(); }
+                    catch (Exception qEx) { RoleLogger.Warn("[Host]", "[P2P-Quarantine] ResetAfterSession (Stop) 异常（不阻断）: " + qEx); }
+                    try { SteamPersonaDisplay.ResetAfterSession(); }
+                    catch (Exception nameEx) { RoleLogger.Warn("[Host]", "[P2P-Persona] ResetAfterSession (Stop) 异常（不阻断）: " + nameEx.GetType().Name); }
                 }
             }
         }
@@ -1705,11 +1766,10 @@ namespace SteamP2PFriends.Host
                 ulong steamId = player.playerID.steamID.m_SteamID;
                 RoleLogger.Info("[Host]", $"[P2P] 检测到玩家 {playerName} 连入 (steamID={steamId})");
 
-                if (Provider.hasCheats)
-                {
-                    RoleLogger.Info("[Host]", $"[P2P] 作弊模式已开启，开始自动为 {playerName} 授权 admin...");
-                    GrantAdminToPlayer(player);
-                }
+                // Stage 7-6: atomically promote the ReadyToConnect reservation before any gameplay privilege.
+                P2PQuarantineAdmissionService.PromoteConnected(player);
+
+                ApplySessionAdminPolicy(player);
             }
             catch (Exception ex)
             {
@@ -1718,84 +1778,130 @@ namespace SteamP2PFriends.Host
         }
 
         /// <summary>
-        /// v0.2.3.6 P0-D：GrantAdminToPlayer 状态回退修复（Codex 第六次审计 Critical-2）。
-        ///
-        /// v0.2.3.5 回退根因：
-        ///   - 每次玩家连接都无条件调用 SteamAdminlist.load()。
-        ///   - vanilla load() 会执行 _list = new List&lt;SteamAdminID&gt;()，清空当前内存管理员列表。
-        ///   - 多人连接序列（房主 -> 客机A -> 客机B）中，前一玩家授权后会被下一次 load() 抹除。
-        ///
-        /// v0.2.3.6 修复：
-        ///   1. 删除每次连接的无条件 load()。
-        ///   2. 仅在 SteamAdminlist.list == null 时（会话准备阶段 load() 未成功）防御性调用一次 load()。
-        ///   3. list 非 null 时绝不再 load()，保留会话内已授权条目。
-        ///   4. 保留正确签名 admin(CSteamID playerID, CSteamID judgeID)。
-        ///
-        /// 独立验证（审计 P0-D item 4）：
-        ///   房主 -> 客机A -> 客机B 连接序列后，三者管理员状态和 list 应同时保留。
-        ///   测试用例将在返修报告中给出，不混入本轮路由诊断构建。
+        /// Applies the room's "allow others cheats" setting to the current connection only.
+        /// Vanilla admin/unadmin are used only as Reliable state replication helpers; the in-memory
+        /// persistent list is restored to its exact pre-call snapshot before returning.
         /// </summary>
-        private static void GrantAdminToPlayer(SteamPlayer player)
+        private static void ApplySessionAdminPolicy(SteamPlayer player)
         {
             try
             {
-                if (ReferenceEquals(player, null))
-                {
-                    RoleLogger.Warn("[Host]", "[P1-3] GrantAdminToPlayer: player=null，跳过");
-                    return;
-                }
-                if (ReferenceEquals(player.playerID, null))
-                {
-                    RoleLogger.Warn("[Host]", "[P1-3] GrantAdminToPlayer: player.playerID=null，跳过");
-                    return;
-                }
-
-                // P0-D：仅在 list == null 时防御性 load()，避免每次连接重置管理员列表
-                List<SteamAdminID> adminList = SteamAdminlist.list;
-                if (adminList == null)
-                {
-                    RoleLogger.Info("[Host]",
-                        "[P1-3] SteamAdminlist.list 为 null，执行一次防御性 load()（首次连接或会话准备阶段未成功）");
-                    try
-                    {
-                        ReflectionUtil.InvokeStatic(typeof(SteamAdminlist), "load");
-                    }
-                    catch (Exception ex)
-                    {
-                        RoleLogger.Warn("[Host]", $"[P1-3] SteamAdminlist.load() 异常（不阻断）: {ex.Message}");
-                    }
-                    adminList = SteamAdminlist.list;
-                    if (adminList == null)
-                    {
-                        RoleLogger.Warn("[Host]",
-                            "[P1-3] GrantAdminToPlayer: 防御性 load() 后 SteamAdminlist.list 仍为 null，跳过 admin() 调用");
-                        return;
-                    }
-                }
-                else
-                {
-                    RoleLogger.Info("[Host]",
-                        $"[P1-3] SteamAdminlist.list 已初始化 (count={adminList.Count})，跳过 load() 避免状态回退");
-                }
+                ThreadUtil.assertIsGameThread();
+                if (ReferenceEquals(player, null) || ReferenceEquals(player.playerID, null)) return;
 
                 CSteamID playerSteamId = player.playerID.steamID;
-                CSteamID judgeSteamId = Provider.user;
-                string playerName = player.playerID.playerName ?? "unknown";
+                bool isLocalHost = playerSteamId == Provider.user;
+                EP2PSessionAdminAction action = P2PSessionAdminPolicy.Decide(Provider.hasCheats, isLocalHost);
 
+                if (action == EP2PSessionAdminAction.Preserve)
+                {
+                    RoleLogger.Info("[Host]",
+                        $"[P2P-SessionAdmin] actor={MaskSteamIdForSessionAdmin(playerSteamId)} localHost=true " +
+                        $"desired=preserve effective={player.isAdmin} persistentListMutated=false");
+                    return;
+                }
+
+                bool desired = action == EP2PSessionAdminAction.Grant;
+                SetTransientAdminState(player, desired);
                 RoleLogger.Info("[Host]",
-                    $"[P1-3] GrantAdminToPlayer: 调用 admin(playerSteamId={playerSteamId.m_SteamID}, " +
-                    $"judgeSteamId={judgeSteamId.m_SteamID}) playerName={playerName} listCountBefore={adminList.Count}");
-
-                // 使用正确签名：admin(CSteamID, CSteamID)
-                SteamAdminlist.admin(playerSteamId, judgeSteamId);
-
-                RoleLogger.Info("[Host]",
-                    $"[P1-3] >>> 已为 {playerName} 发放管理员权限 listCountAfter={SteamAdminlist.list?.Count ?? -1} <<<");
+                    $"[P2P-SessionAdmin] actor={MaskSteamIdForSessionAdmin(playerSteamId)} localHost={isLocalHost} " +
+                    $"desired={desired} effective={player.isAdmin} persistentListMutated=false");
             }
             catch (Exception ex)
             {
-                RoleLogger.Error("[Host]", $"[P1-3] GrantAdminToPlayer 失败: {ex}");
+                RoleLogger.Error("[Host]", $"[P2P-SessionAdmin] policy failed closed: {ex}");
+                try
+                {
+                    if (!ReferenceEquals(player, null) && !ReferenceEquals(player.playerID, null) &&
+                        player.playerID.steamID != Provider.user)
+                    {
+                        Provider.kick(player.playerID.steamID, "Unable to enforce room permissions.");
+                    }
+                }
+                catch (Exception kickEx)
+                {
+                    RoleLogger.Error("[Host]", "[P2P-SessionAdmin] fail-closed kick failed: " + kickEx.Message);
+                }
             }
+        }
+
+        private static void SetTransientAdminState(SteamPlayer player, bool desired)
+        {
+            ThreadUtil.assertIsGameThread();
+            if (player.isAdmin == desired) return;
+
+            List<SteamAdminID> adminList = SteamAdminlist.list;
+            if (adminList == null)
+                throw new InvalidOperationException("SteamAdminlist.list is null during session admin projection");
+
+            CSteamID playerSteamId = player.playerID.steamID;
+            int existingIndex = FindAdminIndex(adminList, playerSteamId);
+            SteamAdminID existing = existingIndex >= 0 ? adminList[existingIndex] : null;
+            CSteamID originalJudge = existing == null ? CSteamID.Nil : existing.judgeID;
+            int originalCount = adminList.Count;
+
+            if (desired)
+            {
+                try
+                {
+                    // SteamAdminlist.admin returns early for an existing list entry without replicating
+                    // Admined, so temporarily remove the persistent entry to force the vanilla state message.
+                    if (existing != null) adminList.RemoveAt(existingIndex);
+                    // Reuse the vanilla Reliable Admined replication, then restore the persistent list snapshot.
+                    SteamAdminlist.admin(playerSteamId, Provider.user);
+                }
+                finally
+                {
+                    int addedIndex = FindAdminIndex(adminList, playerSteamId);
+                    if (addedIndex >= 0) adminList.RemoveAt(addedIndex);
+                    if (existing != null)
+                    {
+                        existing.judgeID = originalJudge;
+                        int restoreIndex = Math.Min(existingIndex, adminList.Count);
+                        adminList.Insert(restoreIndex, existing);
+                    }
+                }
+            }
+            else
+            {
+                try
+                {
+                    // Reuse the vanilla Reliable Unadmined replication. A pre-existing persistent entry
+                    // is reinserted immediately so the P2P room toggle does not edit Adminlist.dat state.
+                    SteamAdminlist.unadmin(playerSteamId);
+                }
+                finally
+                {
+                    if (existing != null && FindAdminIndex(adminList, playerSteamId) < 0)
+                    {
+                        int restoreIndex = Math.Min(existingIndex, adminList.Count);
+                        adminList.Insert(restoreIndex, existing);
+                    }
+                }
+            }
+
+            bool persistentEntryRestored = existing == null
+                ? FindAdminIndex(adminList, playerSteamId) < 0
+                : FindAdminIndex(adminList, playerSteamId) >= 0 && existing.judgeID == originalJudge;
+            if (adminList.Count != originalCount || !persistentEntryRestored)
+                throw new InvalidOperationException("session admin projection changed persistent admin list snapshot");
+        }
+
+        private static int FindAdminIndex(List<SteamAdminID> adminList, CSteamID playerSteamId)
+        {
+            for (int index = 0; index < adminList.Count; index++)
+            {
+                SteamAdminID entry = adminList[index];
+                if (entry != null && entry.playerID == playerSteamId) return index;
+            }
+            return -1;
+        }
+
+        private static string MaskSteamIdForSessionAdmin(CSteamID steamId)
+        {
+            string value = steamId.m_SteamID.ToString();
+            if (value.Length <= 8) return "masked";
+            return value.Substring(0, 8) + "..." + value.Substring(value.Length - 4);
         }
 
         private static void EnsureCommanderInitialized()

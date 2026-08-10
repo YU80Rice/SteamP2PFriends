@@ -48,12 +48,41 @@
       <HintPath>..\..\Libs\0Harmony.dll</HintPath>
       <Private>True</Private>
     </Reference>
+    <!-- Stage 7-3 v4 H2：HarmonyX 运行时依赖（真实 Harmony 实例 patch 需要 MonoMod + Mono.Cecil） -->
+    <Reference Include="MonoMod.RuntimeDetour">
+      <HintPath>..\..\Libs\MonoMod.RuntimeDetour.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="MonoMod.Utils">
+      <HintPath>..\..\Libs\MonoMod.Utils.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="Mono.Cecil">
+      <HintPath>..\..\Libs\Mono.Cecil.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="Mono.Cecil.Mdb">
+      <HintPath>..\..\Libs\Mono.Cecil.Mdb.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="Mono.Cecil.Pdb">
+      <HintPath>..\..\Libs\Mono.Cecil.Pdb.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="Mono.Cecil.Rocks">
+      <HintPath>..\..\Libs\Mono.Cecil.Rocks.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
     <Reference Include="com.rlabrecque.steamworks.net">
       <HintPath>..\..\Libs\com.rlabrecque.steamworks.net.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="Assembly-CSharp">
       <HintPath>..\..\Libs\Assembly-CSharp.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="SystemEx">
+      <HintPath>..\..\Libs\SystemEx.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="UnityEngine">
@@ -92,15 +121,32 @@
       <HintPath>..\..\Libs\SDG.NetPak.Runtime.dll</HintPath>
       <Private>True</Private>
     </Reference>
+    <!-- Stage 7-3 v3：SDG.Glazier.Runtime 引用 netstandard 2.1.0.0；测试控制台需此 facade -->
+    <Reference Include="netstandard">
+      <HintPath>..\..\Libs\netstandard.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Program.cs" />
     <Compile Include="WhitelistServiceTests.cs" />
+    <Compile Include="JoinApprovalServiceTests.cs" />
+    <Compile Include="UiLifecycleTests.cs" />
+    <Compile Include="SteamPersonaDisplayTests.cs" />
+    <Compile Include="ApprovalPanelLayoutTests.cs" />
+    <Compile Include="AtomicSnapshotTests.cs" />
+    <Compile Include="Stage7_5Tests.cs" />
+    <Compile Include="Stage7_6Tests.cs" />
+    <Compile Include="Stage7_8Tests.cs" />
+    <Compile Include="HarmonyMetadataTests.cs" />
+    <Compile Include="AuthorityGenerationGateTests.cs" />
     <Compile Include="Fakes\FakeWhitelistStore.cs" />
     <Compile Include="Fakes\FakeWhitelistRuntimeContext.cs" />
     <Compile Include="Fakes\FakeWhitelistDisconnectGateway.cs" />
+    <Compile Include="Fakes\FakeApprovalRuntimeContext.cs" />
+    <Compile Include="Fakes\FakeApprovalWhitelistProxy.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

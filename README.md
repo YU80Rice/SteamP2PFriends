@@ -23,8 +23,8 @@ SteamP2PFriends 是一个 Unturned 的 BepInEx 插件，通过 Steam P2P 网络�
 |---|---|
 | 版本 | v0.2.3.37 stage6A-1 |
 | BepInPlugin GUID | `com.yu80rice.steamp2pfriends` |
-| AssemblyVersion | 0.2.3.37 |
-| AssemblyFileVersion | 0.2.3.37 |
+| AssemblyVersion | 0.2.3.41 |
+| AssemblyFileVersion | 0.2.3.41 |
 | Stage 6B 测试 DLL SHA-256 | `4C8321018295B1650B7CCF0356EF238F7E358A349046410AC9DF5D6AD3C3A195` |
 | DiagnosticBuildValid | true |
 

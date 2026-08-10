@@ -80,6 +80,10 @@
       <HintPath>..\Libs\SDG.NetPak.Runtime.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <Reference Include="SystemEx">
+      <HintPath>..\Libs\SystemEx.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <Reference Include="com.rlabrecque.steamworks.net">
       <HintPath>..\Libs\com.rlabrecque.steamworks.net.dll</HintPath>
       <Private>False</Private>
@@ -93,23 +97,29 @@
     <Compile Include="Shared\SteamRuntime.cs" />
     <Compile Include="Shared\ReflectionUtil.cs" />
     <Compile Include="Shared\RoleLogger.cs" />
+    <Compile Include="Shared\P2PClientUiEnvironment.cs" />
+    <Compile Include="Shared\SteamPersonaDisplay.cs" />
+    <Compile Include="Shared\UnifiedJoinAddressClassifier.cs" />
     <Compile Include="Shared\DiagnosticContext.cs" />
     <Compile Include="Shared\Enums\EHostMode.cs" />
     <Compile Include="Shared\Enums\EP2PLobbyState.cs" />
     <Compile Include="Shared\Enums\EJoinState.cs" />
     <Compile Include="Host\HostManager.cs" />
     <Compile Include="Host\P2PWhitelistService.cs" />
-    <Compile Include="Host\P2PWhitelistModal.cs" />
+    <Compile Include="Host\P2PJoinApprovalService.cs" />
+    <Compile Include="Host\P2PQuarantineAdmissionService.cs" />
+    <Compile Include="Host\P2PRoomRules.cs" />
+    <Compile Include="Host\P2PSessionAdminPolicy.cs" />
     <Compile Include="Host\Stage6ASaveRoundtripObserver.cs" />
     <Compile Include="Host\Stage6BWorkshopSession.cs" />
     <Compile Include="Host\MasterBundleHashInitializer.cs" />
     <Compile Include="Host\P2PLobbyManager.cs" />
     <Compile Include="Host\HasCheatsGuardWatcher.cs" />
     <Compile Include="Host\SteamGameServerCallbacksWatcher.cs" />
-    <Compile Include="Host\HostSteamIdDisplayService.cs" />
     <Compile Include="Host\PlayerInitializationTracker.cs" />
     <Compile Include="Client\P2PJoinManager.cs" />
-    <Compile Include="Client\SteamIdInputModal.cs" />
+    <Compile Include="Client\P2PApprovalWaitController.cs" />
+    <Compile Include="Client\P2PQuarantineClientView.cs" />
     <Compile Include="Client\ClientLobbyListener.cs" />
     <Compile Include="Client\NativeLoadingGateDumper.cs" />
     <Compile Include="Client\DisconnectTracer.cs" />
@@ -123,6 +133,7 @@
     <Compile Include="Patches\SteamworksServerMultiplayerServiceOpenPatch.cs" />
     <Compile Include="Patches\SteamworksServerMultiplayerServiceClosePatch.cs" />
     <Compile Include="Patches\MenuPlaySingleplayerUIPatch.cs" />
+    <Compile Include="Patches\MenuPlayConnectP2PRoutePatch.cs" />
     <Compile Include="Patches\SteamNetworkingRouteDiagnosticsPatch.cs" />
     <Compile Include="Patches\ServerTransportInitializeDiagnosticPatch.cs" />
     <Compile Include="Patches\UnityLogBridgePatch.cs" />
@@ -138,6 +149,12 @@
     <Compile Include="Patches\PlayerMovementInitializePlayerPrefixPatch.cs" />
     <Compile Include="Patches\GameplayReadyBitmaskPatch.cs" />
     <Compile Include="Patches\ProviderRejectDiagnosticPatch.cs" />
+    <Compile Include="Patches\P2PWhitelistRequestCapturePatch.cs" />
+    <Compile Include="Patches\P2PPendingIdentityCapturePatch.cs" />
+    <Compile Include="Patches\P2PRejectPendingIdentityCapturePatch.cs" />
+    <Compile Include="Patches\P2PQuarantineAdmissionPatches.cs" />
+    <Compile Include="Patches\P2PQuarantineClientInputPatch.cs" />
+    <Compile Include="Patches\P2PListenHostCommandPermissionPatch.cs" />
     <Compile Include="Patches\ProviderAcceptStageDiagnosticPatch.cs" />
     <Compile Include="Patches\PlayerComponentInitializeDiagnosticPatch.cs" />
     <Compile Include="Patches\InitialStateReceiveDiagnosticPatch.cs" />
@@ -180,6 +197,8 @@
     <Compile Include="Shared\DiagnosticMaskUtil.cs" />
     <Compile Include="Patches\WorldSyncDiagnosticCore.cs" />
     <Compile Include="Patches\ItemManagerWorldSyncDiagnosticPatch.cs" />
+    <Compile Include="Patches\AuthoritativeItemGenerationGatePatch.cs" />
+    <Compile Include="Patches\InventoryWorldAuthorityProbe.cs" />
     <Compile Include="Patches\ResourceManagerWorldSyncDiagnosticPatch.cs" />
     <Compile Include="Patches\ObjectManagerWorldSyncDiagnosticPatch.cs" />
     <Compile Include="Patches\VehicleManagerWorldSyncDiagnosticPatch.cs" />
@@ -206,6 +225,11 @@
     <Compile Include="Patches\P0EBarricadeLifecycle\BarricadeLifecycleOwnerVerify.cs" />
     <Compile Include="Patches\P0EBarricadeLifecycle\BarricadeLifecycleRegistration.cs" />
     <Compile Include="Patches\P0EBarricadeLifecycle\BarricadeLifecycleDiagQuota.cs" />
+    <Compile Include="UI\P2PNativeMenuUI.cs" />
+    <Compile Include="UI\P2PPlayerListApprovalDecorator.cs" />
+    <Compile Include="UI\P2PHostSessionUI.cs" />
+    <Compile Include="UI\P2PPauseMenuSurface.cs" />
+    <Compile Include="Patches\P2PGroupStateProbe.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

@@ -472,6 +472,17 @@ namespace SteamP2PFriends.Host
             }
         }
 
+        /// <summary>Stage 7-6 U player-list decorator lookup. Authorization remains keyed only by CSteamID.</summary>
+        internal static bool ContainsForUi(CSteamID target)
+        {
+            _runtime.AssertGameThread();
+            if (target == CSteamID.Nil || !target.IsValid() || !CanManage()) return false;
+            lock (WhitelistSync)
+            {
+                return CanManage() && _store.Contains(target);
+            }
+        }
+
         // ===== 文件证据记录（蓝图 §2.1 + 设计 §3.9）=====
 
         /// <summary>

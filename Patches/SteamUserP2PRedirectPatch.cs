@@ -8,7 +8,7 @@ using Steamworks;
 namespace SteamP2PFriends.Patches
 {
     /// <summary>
-    /// SteamUser-identity P2P 重定向 12 方法（v0.2.1 修订：默认 P2P 模式启用，LAN 模式放行原生）。
+    /// SteamUser-identity P2P/Direct-IP 重定向（P2P 模式启用，LAN 模式放行原生）。
     ///
     /// 核心思路：vanilla ServerTransport_SteamNetworkingSockets 调用
     ///   SteamGameServerNetworkingSockets.CreateListenSocketP2P
@@ -35,6 +35,30 @@ namespace SteamP2PFriends.Patches
         /// 门控：仅 P2P 模式启用重定向。LAN/None 模式放行原生 vanilla 行为。
         /// </summary>
         private static bool ShouldRedirect => HostManager.HostMode == EHostMode.P2P;
+
+        internal static System.Reflection.MethodInfo ResolveCreateListenSocketIPTargetForTest()
+        {
+            return AccessTools.Method(typeof(SteamGameServerNetworkingSockets),
+                nameof(SteamGameServerNetworkingSockets.CreateListenSocketIP),
+                new[] { typeof(SteamNetworkingIPAddr).MakeByRefType(), typeof(int), typeof(SteamNetworkingConfigValue_t[]) });
+        }
+
+        [HarmonyPatch(typeof(SteamGameServerNetworkingSockets), nameof(SteamGameServerNetworkingSockets.CreateListenSocketIP))]
+        [HarmonyPrefix]
+        public static bool CreateListenSocketIP_Prefix(ref HSteamListenSocket __result,
+            ref SteamNetworkingIPAddr localAddress, int nOptions, SteamNetworkingConfigValue_t[] pOptions)
+        {
+            if (!ShouldRedirect) return true;
+
+            __result = SteamNetworkingSockets.CreateListenSocketIP(ref localAddress, nOptions, pOptions);
+            RoleLogger.Info("[Host]",
+                "[DirectIP-SteamUser] CreateListenSocketIP redirected " +
+                "handle=" + __result.m_HSteamListenSocket +
+                " ipv4=" + localAddress.GetIPv4() +
+                " connectionPort=" + localAddress.m_port +
+                " valid=" + (__result != HSteamListenSocket.Invalid));
+            return false;
+        }
 
         [HarmonyPatch(typeof(SteamGameServerNetworkingSockets), nameof(SteamGameServerNetworkingSockets.CreateListenSocketP2P))]
         [HarmonyPrefix]

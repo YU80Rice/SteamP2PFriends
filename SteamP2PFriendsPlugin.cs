@@ -9,6 +9,10 @@ using SteamP2PFriends.Client;
 using SteamP2PFriends.Host;
 using SteamP2PFriends.Patches;
 using SteamP2PFriends.Shared;
+using SteamP2PFriends.UI;
+using Steamworks;
+using System.Collections.Generic;
+using System.Reflection;
 using UnityEngine;
 namespace SteamP2PFriends
 {
@@ -29,7 +33,7 @@ namespace SteamP2PFriends
     ///   - 不以 Accepted + clients + bitmask 直接宣告真实 GameplayReady
     ///   - watchdog 超时不调 Provider.disconnect / RequestDisconnect
     /// </summary>
-    [BepInPlugin("com.yu80rice.steamp2pfriends", "SteamP2PFriends", "0.2.3.38")]
+    [BepInPlugin("com.yu80rice.steamp2pfriends", "SteamP2PFriends", "0.2.3.56")]
     [BepInDependency("com.yu80rice.launchinventorytidy", BepInDependency.DependencyFlags.SoftDependency)]
     public class SteamP2PFriendsPlugin : BaseUnityPlugin
     {
@@ -40,6 +44,12 @@ namespace SteamP2PFriends
         public static ConfigEntry<bool> EnableP2PCoop;
         public static ConfigEntry<string> ServerName;
         public static ConfigEntry<byte> MaxPlayers;
+        public static ConfigEntry<EGameMode> LastRoomMode;
+        public static ConfigEntry<bool> LastRoomCheats;
+        public static ConfigEntry<bool> LastRoomPvp;
+        public static ConfigEntry<bool> LastRoomKeepInventory;
+        public static ConfigEntry<bool> LastRoomKeepSkills;
+        public static ConfigEntry<bool> LastRoomKeepExperience;
         public static ConfigEntry<string> GSLT_Login_Token;
         public static ConfigEntry<bool> VerboseLog;
         public static ConfigEntry<bool> LanTestMode;
@@ -63,6 +73,21 @@ namespace SteamP2PFriends
         /// </summary>
         public static bool RedactionSelfTestPassed { get; private set; }
 
+        /// <summary>
+        /// Stage 7-3 v4 [指令 D]：Provider.reject capture Prefix 真实注册结果。
+        /// 由 Awake 中 VerifyP2PWhitelistCaptureRegistration 设置，
+        /// VerifyCriticalPatches 聚合到 DiagnosticBuildValid 阻断门。
+        /// attribute 单测不足以证明激活；此处用 Harmony.GetPatchInfo 精确验证。
+        /// </summary>
+        public static bool CaptureRegistrationValid { get; private set; }
+
+        /// <summary>Stage 7-5 接管补丁（名称捕获、组探针、房主本地存档桥）的真实 Harmony 注册门。</summary>
+        public static bool Stage75TakeoverRegistrationValid { get; private set; }
+
+        /// <summary>Stage 7-6 quarantine admission, RPC gate, and U-list decorator registration gate.</summary>
+        public static bool Stage76QuarantineRegistrationValid { get; private set; }
+        public static bool Stage78UnifiedRegistrationValid { get; private set; }
+
         private Harmony _harmony;
 
         private void Awake()
@@ -76,6 +101,18 @@ namespace SteamP2PFriends
             EnableP2PCoop = Config.Bind("General", "EnableP2PCoop", true, "是否启用 P2P 好友联机");
             ServerName = Config.Bind("General", "ServerName", "P2P Co-op", "房主服务器名称");
             MaxPlayers = Config.Bind("General", "MaxPlayers", (byte)4, "最大玩家数（1-32）");
+            LastRoomMode = Config.Bind("RoomDefaults", "Mode", EGameMode.EASY,
+                "上一次成功启动的房间难度");
+            LastRoomCheats = Config.Bind("RoomDefaults", "AllowCheats", true,
+                "上一次成功启动的房间是否允许其他玩家使用作弊指令");
+            LastRoomPvp = Config.Bind("RoomDefaults", "EnablePvp", false,
+                "上一次成功启动的房间是否开启 PVP");
+            LastRoomKeepInventory = Config.Bind("RoomDefaults", "KeepInventory", true,
+                "上一次成功启动的房间是否死亡保留物品与装备");
+            LastRoomKeepSkills = Config.Bind("RoomDefaults", "KeepSkills", true,
+                "上一次成功启动的房间是否死亡保留技能等级");
+            LastRoomKeepExperience = Config.Bind("RoomDefaults", "KeepExperience", true,
+                "上一次成功启动的房间是否死亡保留经验");
             GSLT_Login_Token = Config.Bind("General", "GSLT_Login_Token", "",
                 "[已弃用 v0.2.2] P2P 模式固定 SteamUser identity 路线，GSLT 不再参与运行。保留仅为向后兼容旧 cfg。");
             VerboseLog = Config.Bind("Debug", "VerboseLog", true, "是否输出详细日志");
@@ -89,6 +126,7 @@ namespace SteamP2PFriends
             RoleLogger.Initialize(Logger, VerboseLog.Value);
 
             RoleLogger.Info("[Shared]", "============================================");
+            RoleLogger.Info("[Shared]", "=== SteamP2PFriends v0.2.3.51 Alpha-1 Natural Item Authority Fix ===");
             RoleLogger.Info("[Shared]", "=== SteamP2PFriends v0.2.3.37-P0-B-6-P0-D-ESC-2 双端插件已加载 (v0.2.3.37 P0-B-6 onLevelLoaded Postfix 触发全地图 generateItems：修复 v0.2.3.36 P0-B-5 在 OnServerHosted 时机过早导致 LevelItems.spawns=null 跳过预生成，改为在 onLevelLoaded level=2 Postfix 中检测 spawns 就绪后触发，绕过时序问题；P0-D-ESC-2 Prefix 运行时诊断日志：25th 测试 Prefix 自检通过但 timeScale=0.00 持续，根因不明，增加状态变化即时日志 + 每 5s 心跳日志，26th 测试后根据日志确定具体修复方向；Codex 第二十五次双机测试外部审计 §4.1 + §4.2 授权实施) ===");
             RoleLogger.Info("[Shared]", "[Shared] 角色：自动判定（菜单=SP/客机，host()后=房主）");
             RoleLogger.Info("[Shared]",
@@ -156,6 +194,18 @@ namespace SteamP2PFriends
 
             ApplyManualWrapperPatches();
             ApplyManualDiagnosticPatches();
+
+            try
+            {
+                P2PQuarantineReadyToConnectScopePatch.RegisterManual(_harmony);
+                P2PQuarantineServerInvokeGatePatch.RegisterManual(_harmony);
+                P2PPlayerListApprovalDecorator.RegisterManual(_harmony);
+                P2PListenHostCommandPermissionPatch.RegisterManual(_harmony);
+            }
+            catch (System.Exception ex)
+            {
+                RoleLogger.Error("[Shared]", "[Stage7-6] manual registration failed: " + ex);
+            }
 
             // v0.2.3.14 P0-B：AssetIntegritySnapshot 反射缓存预热（不阻断加载）
             try
@@ -262,6 +312,54 @@ namespace SteamP2PFriends
             }
 
             // v0.2.3.7 P0-3：VerifyCriticalPatches 聚合脱敏自检结果
+            // Stage 7-3 v4 [指令 D]：真实 Harmony 注册门。PatchAll 后用 Harmony.GetPatchInfo 精确验证
+            //   Provider.reject(ITransportConnection, ESteamRejection) 的 Prefix 恰为
+            //   P2PWhitelistRequestCapturePatch.Prefix 且 owner == HARMONY_ID。
+            //   失败则 P2P fail-closed（DiagnosticBuildValid=false）。attribute 单测不足以证明激活。
+            bool captureRegistrationOk = false;
+            try
+            {
+                captureRegistrationOk = VerifyP2PWhitelistCaptureRegistration();
+            }
+            catch (System.Exception ex)
+            {
+                RoleLogger.Error("[Shared]", $"VerifyP2PWhitelistCaptureRegistration 异常（视为 FAIL）: {ex}");
+                captureRegistrationOk = false;
+            }
+            CaptureRegistrationValid = captureRegistrationOk;
+
+            bool stage75RegistrationOk = false;
+            try
+            {
+                stage75RegistrationOk = VerifyStage75TakeoverRegistrations();
+            }
+            catch (System.Exception ex)
+            {
+                RoleLogger.Error("[Shared]", "VerifyStage75TakeoverRegistrations 异常（视为 FAIL）: " + ex);
+                stage75RegistrationOk = false;
+            }
+            Stage75TakeoverRegistrationValid = stage75RegistrationOk;
+
+            Stage76QuarantineRegistrationValid =
+                P2PQuarantineReadyToConnectScopePatch.RegistrationValid &&
+                P2PQuarantineServerInvokeGatePatch.RegistrationValid &&
+                P2PPlayerListApprovalDecorator.RegistrationValid &&
+                VerifyStage76AttributeRegistrations() &&
+                P2PQuarantineAdmissionService.IsSignalBitCompatible();
+            if (!Stage76QuarantineRegistrationValid)
+            {
+                RoleLogger.Error("[Shared]",
+                    "[Stage7-6] !!! quarantine registration/signal compatibility gate failed");
+            }
+
+            Stage78UnifiedRegistrationValid = VerifyStage78UnifiedConnectRegistrations() &&
+                P2PListenHostCommandPermissionPatch.RegistrationValid;
+            if (!Stage78UnifiedRegistrationValid)
+            {
+                RoleLogger.Error("[Shared]",
+                    "[Stage7-8] !!! unified connect route/indicator registration gate failed");
+            }
+
             VerifyCriticalPatches(redactionSelfTestPassed);
 
             // v0.2.3.7 P0-1 修复（审计 Critical-1）：INVALID 时不得继续初始化可操作的 P2P/UI 入口
@@ -354,6 +452,16 @@ namespace SteamP2PFriends
                     }
                 }
                 catch { }
+
+                if (steamId != 0UL)
+                {
+                    try { P2PQuarantineAdmissionService.OnDisconnected(new CSteamID(steamId)); }
+                    catch (System.Exception qEx)
+                    {
+                        RoleLogger.Warn("[Host]",
+                            "[P2P-Quarantine] disconnect cleanup failed: " + qEx.GetType().Name);
+                    }
+                }
 
                 // v0.2.3.38 4B 编码 E-4：OnEnemyDisconnectedHandler 入口观察。
                 // 记录被断开的远端玩家 SteamID 与当前 P0-S3 RetryStates 计数。
@@ -597,6 +705,10 @@ namespace SteamP2PFriends
             }
             if (!EnableP2PCoop.Value) return;
 
+            // Stage 7-3 v4 [指令 B]：Unity Update 即游戏主线程；显式断言把审批状态层与 HUD 层解耦。
+            //   业务 drain 不得依赖 HUD 是否创建；此断言把主线程契约固化到接口边界。
+            ThreadUtil.assertIsGameThread();
+
             try
             {
                 // v0.2.3.9 修复：NativeSnsLogProbe 在 Steamworks 初始化后重试 Enable
@@ -606,7 +718,29 @@ namespace SteamP2PFriends
                 HostManager.TickListen();
                 P2PLobbyManager.Tick();
                 P2PJoinManager.Tick();
-                HostSteamIdDisplayService.Tick();
+
+                // Stage 7-3 v4 [指令 A]：业务 drain 脱离 HUD。
+                //   不可由 PlayerUI/MenuUI 是否创建决定是否消费 reject queue。
+                //   HUD 未创建 / parent=null / CanTouchClientUi=false 时，pending 仍须登记。
+                //   仅在 P2P 房主活动时 drain；不活动时不得消费。
+                //   原版 WHITELISTED 拒绝保持不变；此修复不放宽任何陌生玩家准入。
+                if (HostManager.IsP2PHostMode && Provider.isServer && Provider.isWhitelisted)
+                {
+                    SteamPersonaDisplay.DrainObservedCharacterNamesOnMainThread();
+                    P2PQuarantineAdmissionService.Tick();
+                }
+
+                // Stage 7-3 v3 §3.5 + v4 [指令 A]：HUD 只是显示层；保持既有 fail-closed UI 保护。
+                //   U3DS / Dedicated 探测 fail-closed 时不触碰任何 UI 类型属性。
+                //   Tick 自己 EnsureCreated（含 parent identity 生命周期检查）。
+                if (SteamP2PFriends.Shared.P2PClientUiEnvironment.CanTouchClientUi())
+                {
+                    P2PNativeMenuUI.Tick();
+                    if (!HostManager.IsP2PHostMode)
+                    {
+                        P2PQuarantineClientView.Tick();
+                    }
+                }
                 // v0.2.3.3 P0-B：Accepted 后周期性加载门快照
                 NativeLoadingGateDumper.Tick();
                 // v0.2.3.5 P0-3：FindingRoute 生命周期快照 Tick（每帧检查节拍）
@@ -629,28 +763,8 @@ namespace SteamP2PFriends
             }
         }
 
-        private void OnGUI()
-        {
-            // v0.2.3.2 P0-8：INVALID 真门控
-            if (!DiagnosticBuildValid)
-            {
-                return;
-            }
-            if (!EnableP2PCoop.Value) return;
-
-            try
-            {
-                HostSteamIdDisplayService.OnGUI();
-                SteamIdInputModal.OnGUI();
-                // Stage 7-2-2（Codex 133rd §2.4）：白名单管理 UI
-                //   蓝图：DiagnosticBuildValid / EnableP2PCoop 门后调用；异常沿用现有 catch/log 风格
-                P2PWhitelistModal.OnGUI();
-            }
-            catch (System.Exception ex)
-            {
-                Logger.LogWarning($"[P2P-OnGUI] 异常: {ex.Message}");
-            }
-        }
+        // Stage 7-3 v2 §4.4：OnGUI 不再调用 P2P 主交互；零 OnGUI。
+        // 旧 HostSteamIdDisplayService / SteamIdInputModal / P2PWhitelistModal 的 IMGUI 调用已全部删除。
 
         private void OnDestroy()
         {
@@ -693,6 +807,10 @@ namespace SteamP2PFriends
                 SteamP2PFriends.Client.ClientRemotePlayerRenderProbe.ResetAll();
                 // v0.2.3.27 P0-A：WorldSyncDiagnosticCore 世界同步诊断计数清零
                 Patches.WorldSyncDiagnosticCore.ResetAll();
+                // Stage 7-3 v2：销毁原生 UI 容器
+                try { P2PNativeMenuUI.Destroy(); } catch (System.Exception ex) { RoleLogger.Warn("[Shared]", $"[P2P] P2PNativeMenuUI.Destroy 异常: {ex.Message}"); }
+                try { P2PQuarantineClientView.Destroy(); } catch (System.Exception ex) { RoleLogger.Warn("[Shared]", $"[P2P] P2PQuarantineClientView.Destroy 异常: {ex.Message}"); }
+                try { P2PQuarantineAdmissionService.ResetForSession(); } catch (System.Exception ex) { RoleLogger.Warn("[Shared]", $"[P2P] P2PQuarantineAdmissionService.Reset 异常: {ex.Message}"); }
                 _harmony?.UnpatchSelf();
                 RoleLogger.Info("[Shared]", "[P2P] SteamP2PFriends 已卸载");
             }
@@ -700,6 +818,157 @@ namespace SteamP2PFriends
             {
                 Logger.LogError($"[P2P-OnDestroy] 异常: {ex}");
             }
+        }
+
+        /// <summary>
+        /// Stage 7-3 v4 [指令 D]：真实 Harmony 注册门。
+        /// PatchAll 后用 Harmony.GetPatchInfo 精确验证 Provider.reject(ITransportConnection, ESteamRejection)
+        /// 的 Prefix 恰为 P2PWhitelistRequestCapturePatch.Prefix 且 owner == HARMONY_ID。
+        /// 失败则 DiagnosticBuildValid=false（由 VerifyCriticalPatches 聚合 CaptureRegistrationValid）。
+        /// attribute 单测不足以证明激活；此处读取运行时 patch info。
+        /// </summary>
+        private bool VerifyP2PWhitelistCaptureRegistration()
+        {
+            MethodInfo original = AccessTools.Method(typeof(Provider), "reject",
+                new[] { typeof(ITransportConnection), typeof(ESteamRejection) });
+            MethodInfo expectedPrefix = AccessTools.Method(typeof(P2PWhitelistRequestCapturePatch), "Prefix");
+            HarmonyLib.Patches info = original == null ? null : Harmony.GetPatchInfo(original);
+            bool installed = false;
+            if (info != null)
+            {
+                foreach (Patch prefix in info.Prefixes)
+                {
+                    if (prefix.owner == HARMONY_ID && prefix.PatchMethod == expectedPrefix)
+                    {
+                        installed = true;
+                        break;
+                    }
+                }
+            }
+            if (!installed)
+            {
+                RoleLogger.Error("[Shared]",
+                    "[P2P-Approval] !!! Provider.reject capture Prefix absent; P2P fail-closed " +
+                    $"(original={(original == null ? "null" : original.Name)}, " +
+                    $"info={(info == null ? "null" : info.Prefixes.Count.ToString() + " prefixes")})");
+            }
+            return installed;
+        }
+
+        private bool VerifyStage75TakeoverRegistrations()
+        {
+            MethodInfo identityPostfix = AccessTools.Method(typeof(P2PPendingIdentityCapturePatch), "Postfix");
+            ConstructorInfo pendingConstructor = null;
+            ConstructorInfo[] constructors = typeof(SteamPending).GetConstructors(
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            for (int i = 0; i < constructors.Length; i++)
+            {
+                ParameterInfo[] parameters = constructors[i].GetParameters();
+                if (parameters.Length > 1 && parameters[1].ParameterType == typeof(SteamPlayerID))
+                {
+                    if (pendingConstructor != null)
+                    {
+                        RoleLogger.Error("[Shared]", "[Stage7-5] multiple SteamPending identity constructors; fail-closed");
+                        return false;
+                    }
+                    pendingConstructor = constructors[i];
+                }
+            }
+
+            MethodInfo groupOriginal = AccessTools.Method(typeof(PlayerQuests), nameof(PlayerQuests.ReceiveGroupState),
+                new[] { typeof(CSteamID), typeof(EPlayerGroupRank) });
+            MethodInfo groupPrefix = AccessTools.Method(typeof(P2PGroupStateProbe_ReceiveGroupState), "Prefix");
+            MethodInfo groupPostfix = AccessTools.Method(typeof(P2PGroupStateProbe_ReceiveGroupState), "Postfix");
+            MethodInfo rejectIdentityOriginal = AccessTools.Method(typeof(Provider), "reject",
+                new[] { typeof(ITransportConnection), typeof(ESteamRejection), typeof(string) });
+            MethodInfo rejectIdentityPrefix = AccessTools.Method(typeof(P2PRejectPendingIdentityCapturePatch), "Prefix");
+
+            bool identityOk = HasOwnedPatch(pendingConstructor, identityPostfix, false);
+            bool rejectIdentityOk = HasOwnedPatch(rejectIdentityOriginal, rejectIdentityPrefix, true);
+            bool groupPrefixOk = HasOwnedPatch(groupOriginal, groupPrefix, true);
+            bool groupPostfixOk = HasOwnedPatch(groupOriginal, groupPostfix, false);
+            bool allOk = identityOk && rejectIdentityOk && groupPrefixOk && groupPostfixOk;
+
+            if (allOk)
+            {
+                RoleLogger.Info("[Shared]",
+                    "[Stage7-5] OK identity capture + reject-time fallback + group probe registered");
+            }
+            else
+            {
+                RoleLogger.Error("[Shared]", "[Stage7-5] !!! DIAGNOSTIC BUILD INVALID: takeover patch missing" +
+                    " identity=" + identityOk +
+                    " rejectIdentity=" + rejectIdentityOk +
+                    " groupPrefix=" + groupPrefixOk +
+                    " groupPostfix=" + groupPostfixOk);
+            }
+            return allOk;
+        }
+
+        private bool HasOwnedPatch(MethodBase original, MethodInfo expectedPatch, bool prefix)
+        {
+            if (original == null || expectedPatch == null) return false;
+            HarmonyLib.Patches info = Harmony.GetPatchInfo(original);
+            if (info == null) return false;
+            IEnumerable<Patch> patches = prefix ? info.Prefixes : info.Postfixes;
+            foreach (Patch patch in patches)
+            {
+                if (patch.owner == HARMONY_ID && patch.PatchMethod == expectedPatch) return true;
+            }
+            return false;
+        }
+
+        private bool VerifyStage76AttributeRegistrations()
+        {
+            MethodInfo whitelistOriginal = AccessTools.Method(typeof(SteamWhitelist),
+                nameof(SteamWhitelist.checkWhitelisted), new[] { typeof(CSteamID) });
+            MethodInfo whitelistPostfix = AccessTools.Method(
+                typeof(P2PQuarantineWhitelistPermitPatch), nameof(P2PQuarantineWhitelistPermitPatch.Postfix));
+
+            MethodInfo damageOriginal = AccessTools.Method(typeof(PlayerLife), nameof(PlayerLife.askDamage),
+                new[]
+                {
+                    typeof(byte), typeof(Vector3), typeof(EDeathCause), typeof(ELimb), typeof(CSteamID),
+                    typeof(EPlayerKill).MakeByRefType(), typeof(bool), typeof(ERagdollEffect), typeof(bool), typeof(bool)
+                });
+            MethodInfo damagePrefix = AccessTools.Method(
+                typeof(P2PQuarantineDamageGuardPatch), nameof(P2PQuarantineDamageGuardPatch.Prefix));
+
+            MethodInfo inputOriginal = AccessTools.Method(typeof(PlayerInput), "FixedUpdate");
+            MethodInfo inputPrefix = AccessTools.Method(
+                typeof(P2PQuarantineClientInputPatch), nameof(P2PQuarantineClientInputPatch.Prefix));
+
+            bool permitOk = HasOwnedPatch(whitelistOriginal, whitelistPostfix, false);
+            bool damageOk = HasOwnedPatch(damageOriginal, damagePrefix, true);
+            bool inputOk = HasOwnedPatch(inputOriginal, inputPrefix, true);
+            if (!permitOk || !damageOk || !inputOk)
+            {
+                RoleLogger.Error("[Shared]",
+                    "[Stage7-6] attribute patch missing permit=" + permitOk +
+                    " damage=" + damageOk + " input=" + inputOk);
+            }
+            return permitOk && damageOk && inputOk;
+        }
+
+        private bool VerifyStage78UnifiedConnectRegistrations()
+        {
+            MethodBase routeOriginal = Patches.MenuPlayConnectP2PRoutePatch.TargetMethod();
+            MethodInfo routePrefix = AccessTools.Method(typeof(Patches.MenuPlayConnectP2PRoutePatch), "Prefix");
+            MethodBase indicatorOriginal = Patches.MenuPlayConnectP2PIndicatorPatch.TargetMethod();
+            MethodInfo indicatorPostfix = AccessTools.Method(typeof(Patches.MenuPlayConnectP2PIndicatorPatch), "Postfix");
+
+            bool routeOk = HasOwnedPatch(routeOriginal, routePrefix, true);
+            bool indicatorOk = HasOwnedPatch(indicatorOriginal, indicatorPostfix, false);
+            if (!routeOk || !indicatorOk)
+            {
+                RoleLogger.Error("[Shared]", "[Stage7-8] patch missing route=" + routeOk +
+                    " indicator=" + indicatorOk);
+            }
+            else
+            {
+                RoleLogger.Info("[Shared]", "[Stage7-8] OK vanilla connect SteamID route + indicator registered");
+            }
+            return routeOk && indicatorOk;
         }
 
         /// <summary>
@@ -1056,7 +1325,9 @@ namespace SteamP2PFriends
 
             // v0.2.3.2 P0-8：D-10 SNS ConnStatus 双端回调
             // ClientTransport / ServerTransport OnSteamNetConnectionStatusChanged 由 RouteDiagnosticsPatch 登记到具体重载
-            // 这里检查 SteamGameServerNetworkingSockets 的 12 个重定向方法都已登记（核心 P2P 路径）
+            // 这里检查 SteamGameServerNetworkingSockets 的 SteamUser API 域重定向方法都已登记。
+            allOk &= VerifyPatch(typeof(Steamworks.SteamGameServerNetworkingSockets), "CreateListenSocketIP",
+                "D-10/CreateListenSocketIP", requirePrefix: true);
             allOk &= VerifyPatch(typeof(Steamworks.SteamGameServerNetworkingSockets), "CreateListenSocketP2P",
                 "D-10/CreateListenSocketP2P", requirePrefix: true);
             // v0.2.3.6 P0-C：AcceptConnection 现需 Prefix + Postfix（Postfix 用于 ShouldRedirect=false 路径记录）
@@ -1533,6 +1804,48 @@ namespace SteamP2PFriends
             catch (System.Exception ex)
             {
                 RoleLogger.Error("[Shared]", $"[WorldSyncDiag/Item] VerifyRegistration 整体异常: {ex.Message}");
+                allOk = false;
+            }
+
+            try
+            {
+                if (!Patches.AuthoritativeItemGenerationGatePatch.AllRegistrationsSucceeded
+                    || !Patches.AuthoritativeItemGenerationGatePatch.VerifyRegistration())
+                {
+                    RoleLogger.Error("[Shared]",
+                        $"[ItemAuthorityGate] DIAGNOSTIC BUILD INVALID: {Patches.AuthoritativeItemGenerationGatePatch.RegistrationSummary}");
+                    allOk = false;
+                }
+                else
+                {
+                    RoleLogger.Info("[Shared]",
+                        $"[ItemAuthorityGate] registration verified: {Patches.AuthoritativeItemGenerationGatePatch.RegistrationSummary}");
+                }
+            }
+            catch (System.Exception ex)
+            {
+                RoleLogger.Error("[Shared]", $"[ItemAuthorityGate] VerifyRegistration exception: {ex.Message}");
+                allOk = false;
+            }
+
+            try
+            {
+                if (!Patches.InventoryWorldAuthorityProbe.AllRegistrationsSucceeded
+                    || !Patches.InventoryWorldAuthorityProbe.VerifyRegistration())
+                {
+                    RoleLogger.Error("[Shared]",
+                        $"[Alpha-AuthorityProbe] DIAGNOSTIC BUILD INVALID: {Patches.InventoryWorldAuthorityProbe.RegistrationSummary}");
+                    allOk = false;
+                }
+                else
+                {
+                    RoleLogger.Info("[Shared]",
+                        $"[Alpha-AuthorityProbe] registration verified: {Patches.InventoryWorldAuthorityProbe.RegistrationSummary}");
+                }
+            }
+            catch (System.Exception ex)
+            {
+                RoleLogger.Error("[Shared]", $"[Alpha-AuthorityProbe] VerifyRegistration exception: {ex.Message}");
                 allOk = false;
             }
 
@@ -2039,6 +2352,85 @@ namespace SteamP2PFriends
             catch (System.Exception ex)
             {
                 RoleLogger.Error("[Shared]", $"[5B-1B] VerifyRegistration 整体异常: {ex.Message}");
+                allOk = false;
+            }
+
+            // Stage 7-3 v4 [指令 D]：Provider.reject capture Prefix 真实注册门。
+            //   attribute 单测不足以证明激活；VerifyP2PWhitelistCaptureRegistration 用
+            //   Harmony.GetPatchInfo 精确验证 owner + Prefix MethodInfo。失败强制 INVALID。
+            try
+            {
+                if (!CaptureRegistrationValid)
+                {
+                    RoleLogger.Error("[Shared]",
+                        "[P2P-Approval] !!! DIAGNOSTIC BUILD INVALID: Provider.reject capture Prefix 未激活 " +
+                        "(CaptureRegistrationValid=false) - P2P fail-closed");
+                    allOk = false;
+                }
+                else
+                {
+                    RoleLogger.Info("[Shared]",
+                        "[P2P-Approval] OK Provider.reject capture Prefix 已激活 (owner=" + HARMONY_ID + ")");
+                }
+            }
+            catch (System.Exception ex)
+            {
+                RoleLogger.Error("[Shared]", $"[P2P-Approval] CaptureRegistration 聚合异常: {ex.Message}");
+                allOk = false;
+            }
+
+            try
+            {
+                if (!Stage75TakeoverRegistrationValid)
+                {
+                    RoleLogger.Error("[Shared]",
+                        "[Stage7-5] !!! DIAGNOSTIC BUILD INVALID: takeover registration gate failed");
+                    allOk = false;
+                }
+            }
+            catch (System.Exception ex)
+            {
+                RoleLogger.Error("[Shared]", "[Stage7-5] registration aggregate failed: " + ex.Message);
+                allOk = false;
+            }
+
+            try
+            {
+                if (!Stage76QuarantineRegistrationValid)
+                {
+                    RoleLogger.Error("[Shared]",
+                        "[Stage7-6] !!! DIAGNOSTIC BUILD INVALID: quarantine admission/UI registration gate failed");
+                    allOk = false;
+                }
+                else
+                {
+                    RoleLogger.Info("[Shared]",
+                        "[Stage7-6] OK ReadyToConnect scope + InvokeMethod gate + U-list decorator + signal bit");
+                }
+            }
+            catch (System.Exception ex)
+            {
+                RoleLogger.Error("[Shared]", "[Stage7-6] registration aggregate failed: " + ex.Message);
+                allOk = false;
+            }
+
+            try
+            {
+                if (!Stage78UnifiedRegistrationValid)
+                {
+                    RoleLogger.Error("[Shared]",
+                        "[Stage7-8] !!! DIAGNOSTIC BUILD INVALID: unified connect registration gate failed");
+                    allOk = false;
+                }
+                else
+                {
+                    RoleLogger.Info("[Shared]",
+                        "[Stage7-8] OK original connect route preserved; individual SteamID interception active");
+                }
+            }
+            catch (System.Exception ex)
+            {
+                RoleLogger.Error("[Shared]", "[Stage7-8] registration aggregate failed: " + ex.Message);
                 allOk = false;
             }
 
@@ -2897,7 +3289,10 @@ namespace SteamP2PFriends
 
         private void ApplyManualWrapperPatches()
         {
-            RoleLogger.Info("[Shared]", "[Diag] === 手动登记 14 个关键 wrapper patch ===");
+            RoleLogger.Info("[Shared]", "[Diag] === 手动登记 15 个关键 wrapper patch ===");
+
+            TryManualPatch(typeof(Steamworks.SteamGameServerNetworkingSockets), "CreateListenSocketIP",
+                typeof(SteamUserP2PRedirectPatch), nameof(SteamUserP2PRedirectPatch.CreateListenSocketIP_Prefix));
 
             TryManualPatch(typeof(Steamworks.SteamGameServerNetworkingSockets), "CreateListenSocketP2P",
                 typeof(SteamUserP2PRedirectPatch), nameof(SteamUserP2PRedirectPatch.CreateListenSocketP2P_Prefix));
@@ -3369,6 +3764,26 @@ namespace SteamP2PFriends
             catch (System.Exception ex)
             {
                 RoleLogger.Error("[Shared]", $"ItemManagerWorldSyncDiagnosticPatch.RegisterManual 失败: {ex}");
+            }
+
+            // Alpha-1 P0: first successful natural-item generation owns the region for this listen-host session.
+            try
+            {
+                Patches.AuthoritativeItemGenerationGatePatch.RegisterManual(_harmony);
+            }
+            catch (System.Exception ex)
+            {
+                RoleLogger.Error("[Shared]", $"AuthoritativeItemGenerationGatePatch.RegisterManual failed: {ex}");
+            }
+
+            // Alpha inventory/world authority probe: read-only fingerprints and transaction tracing.
+            try
+            {
+                Patches.InventoryWorldAuthorityProbe.RegisterManual(_harmony);
+            }
+            catch (System.Exception ex)
+            {
+                RoleLogger.Error("[Shared]", $"InventoryWorldAuthorityProbe.RegisterManual failed: {ex}");
             }
 
             try

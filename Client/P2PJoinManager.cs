@@ -3,6 +3,7 @@ using SteamP2PFriends.Host;
 using SteamP2PFriends.Shared;
 using SteamP2PFriends.Shared.Enums;
 using Steamworks;
+using System.Runtime.CompilerServices;
 using UnityEngine;
 
 namespace SteamP2PFriends.Client
@@ -52,6 +53,34 @@ namespace SteamP2PFriends.Client
         public static EJoinState State => _state;
         public static ESteamConnectionFailureInfo LastFailureInfo => _lastFailureInfo;
 
+        /// <summary>Stage 7-5 [指令 E]：仅 Idle/TeardownComplete/Failed 可开始新连接（Failed = WHITELISTED 拒绝后连接已关闭）。</summary>
+        public static bool IsSafeToRetry
+        {
+            get
+            {
+                bool stateAllows = _state == EJoinState.Idle ||
+                                   _state == EJoinState.TeardownComplete ||
+                                   _state == EJoinState.Failed;
+                if (!stateAllows || Provider.isConnected) return false;
+
+                // Beta-7：onClientDisconnected 触发后 Level.isExiting 可能仍为 true。
+                // 此时立即 Provider.connect 会反复打断原版 teardown 并触发 CONNECT_RATE_LIMITING。
+                return !Level.isLoading && !Level.isExiting;
+            }
+        }
+
+        internal static bool IsSafeToRetryForTest(
+            EJoinState state,
+            bool providerConnected,
+            bool levelLoading,
+            bool levelExiting)
+        {
+            bool stateAllows = state == EJoinState.Idle ||
+                               state == EJoinState.TeardownComplete ||
+                               state == EJoinState.Failed;
+            return stateAllows && !providerConnected && !levelLoading && !levelExiting;
+        }
+
         public static void Initialize()
         {
             if (_subscribed) return;
@@ -69,19 +98,30 @@ namespace SteamP2PFriends.Client
         }
 
         /// <summary>
-        /// v0.2.3.3 P0-A：尝试连接到房主。
-        /// TeardownFailed 状态下禁止重连（需手动重启游戏）。
-        /// v0.2.3.23 P0-C4：DiagnosticBuildValid=false 时硬门控拒绝（审计报告-Codex §3 P0-Critical-4）。
+        /// v0.2.3.3 P0-A：尝试连接到房主（显式用户操作）。
+        /// Stage 7-5 v2 [P1-EXPLICIT-JOIN-OWNERSHIP-04]：显式加入取消旧等待会话。
         /// </summary>
         public static bool TryConnectToHost(ulong steamIdRaw)
         {
-            // v0.2.3.23 P0-C4：INVALID 硬门控 - 客机公开连接入口
-            //   审计报告-Codex §3 P0-Critical-4 要求：客机公开连接入口同样检查
-            //   实现：DiagnosticBuildValid=false 时直接拒绝，不进入任何状态机
+            ThreadUtil.assertIsGameThread();
+            P2PApprovalWaitController.CancelForExplicitUserJoin();
+            return TryConnectToHostCore(steamIdRaw, P2PConnectOrigin.ExplicitUserAction);
+        }
+
+        /// <summary>Stage 7-5 v2 [指令 E]：等待控制器自动重试入口（不取消自身会话）。</summary>
+        internal static bool TryConnectToHostFromApprovalWait(ulong steamIdRaw)
+        {
+            ThreadUtil.assertIsGameThread();
+            return TryConnectToHostCore(steamIdRaw, P2PConnectOrigin.ApprovalWaitRetry);
+        }
+
+        private static bool TryConnectToHostCore(ulong steamIdRaw, P2PConnectOrigin origin)
+        {
+            // v0.2.3.23 P0-C4：INVALID 硬门控
             if (!SteamP2PFriendsPlugin.DiagnosticBuildValid)
             {
                 RoleLogger.Error(DynamicRole(),
-                    "!!! TryConnectToHost 拒绝执行：DiagnosticBuildValid=false（P0-C4 硬门控）!!!");
+                    "!!! TryConnectToHostCore 拒绝执行：DiagnosticBuildValid=false（P0-C4 硬门控）!!!");
                 try { SafeAlert("SteamP2PFriends 自检未通过，客机连接被拒绝。请查看日志。"); } catch { }
                 return false;
             }
@@ -128,7 +168,6 @@ namespace SteamP2PFriends.Client
                 return false;
             }
 
-            // v0.2.3.3 P1-A：使用动态角色判定
             RoleLogger.Info(DynamicRole(), "[Shared] 角色切换为客机");
 
             _targetSteamId = steamIdRaw;
@@ -139,7 +178,6 @@ namespace SteamP2PFriends.Client
             _lastStage = "Connecting";
             _postAcceptedWatchdogFired = false;
             _acceptedAndLocalComponentsTime = 0f;
-            // v0.2.3.4 Medium-1：新一次连接开始前先 Stop 周期追踪，避免上一次残留
             NativeLoadingGateDumper.StopPostAcceptedTracking();
 
             NativeLoadingGateDumper.Dump("P2PJoinManager.TryConnectToHost(pre-connect)");
@@ -541,6 +579,10 @@ namespace SteamP2PFriends.Client
 
         private static void OnClientConnected()
         {
+            ThreadUtil.assertIsGameThread();
+            // Stage 7-5 v2 [P0-WAIT-SUCCESS-CLEANUP-02]：批准成功后立即清除等待 UI
+            P2PApprovalWaitController.NotifyConnectionAccepted();
+
             RoleLogger.Info(DynamicRole(),
                 $"[Diag] onClientConnected 触发 state={_state} target={_targetSteamId} " +
                 $"isConnected={Provider.isConnected} isServer={Provider.isServer}");
@@ -602,8 +644,17 @@ namespace SteamP2PFriends.Client
             _state = EJoinState.Failed;
             RoleLogger.Error(DynamicRole(),
                 $"!!! 连接失败 !!! target={_targetSteamId} state={_state} info={_lastFailureInfo}");
-            SafeAlert($"连接失败：{_lastFailureInfo}");
-            LogFailureDiagnosticHint(_lastFailureInfo);
+
+            // Stage 7-6 uses one successful connection followed by in-world quarantine.
+            // Legacy WHITELISTED auto-retry is intentionally disabled to prevent Steam rate limiting.
+            HandleDisconnectFailureRouting(_lastFailureInfo, _targetSteamId);
+        }
+
+        /// <summary>Stage 7-5 v3 [P1-WHITELISTED-ALERT-03]：可测试的断开失败路由。</summary>
+        internal static void HandleDisconnectFailureRouting(ESteamConnectionFailureInfo failureInfo, ulong targetSteamId)
+        {
+            SafeAlert($"连接失败：{failureInfo}");
+            if (!_testBypassFailurePresentationRuntime) LogFailureDiagnosticHint(failureInfo);
         }
 
         private static void LogFailureDiagnosticHint(ESteamConnectionFailureInfo info)
@@ -631,7 +682,22 @@ namespace SteamP2PFriends.Client
             }
         }
 
+        // Stage 7-5 v3 W16 测试钩子：SafeAlert 调用计数
+        internal static int _testSafeAlertCount;
+        // 仅控制台单元测试使用：隔离 Unity/Steam ECall，不绕过生产失败路由判断。
+        internal static bool _testBypassFailurePresentationRuntime;
+
         private static void SafeAlert(string message)
+        {
+            _testSafeAlertCount++;
+            if (_testBypassFailurePresentationRuntime) return;
+            SafeAlertRuntime(message);
+        }
+
+        // Unity MenuUI property is an ECall. Keep it out of the testable router so the
+        // CLR test runner never JIT-compiles a client-only UI access.
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static void SafeAlertRuntime(string message)
         {
             // v0.2.3.4 Low-1：null-safe SafeAlert（文案校正版）
             // - 若 MenuUI.window 未就绪，仅记录警告并跳过弹窗（不缓存报警，不阻断）
