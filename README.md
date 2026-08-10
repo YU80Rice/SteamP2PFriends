@@ -1,90 +1,132 @@
 # SteamP2PFriends
 
-> Unturned P2P 联机 BepInEx 插件 · 向原版 SteamP2PFriends 致敬的双端重构
+> 为 Unturned 提供无 U3DS 的便捷 listen-host 联机，同时支持 SteamID P2P 和 IPv4 直连。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
-[![Vibecoding](https://img.shields.io/badge/Development-Vibecoding-blueviolet.svg)](./VIBECODING.md)
+[![Version](https://img.shields.io/badge/version-0.2.3.56-blue.svg)](https://github.com/YU80Rice/SteamP2PFriends/releases/tag/v0.2.3.56)
+[![Status](https://img.shields.io/badge/status-Beta%20Prerelease-orange.svg)](https://github.com/YU80Rice/SteamP2PFriends/releases)
 
 ## 项目简介
 
-SteamP2PFriends 是一个 Unturned 的 BepInEx 插件，通过 Steam P2P 网络实现房主-客机联机。本项目是对原版 SteamP2PFriends 模块的重新设计与实现，向原版致敬的同时解决其未完成的问题。
+SteamP2PFriends 是一个双端 BepInEx 插件。房主可直接从原版单人地图创建多人房间，不需要安装、配置或启动 U3DS。
 
-### 核心特性
+当前插件提供两条并存的联机路径：
 
-- **双端插件**：房主和客机均安装，双方都有完整日志
-- **SteamID 直连**：客机通过房主 SteamID 直连，无需 Steam 好友列表
-- **Workshop 资产兼容**：支持 Workshop 地图、作者声明依赖、OBJECT/ITEM/VEHICLE 自动纳入
-- **原生白名单准入**（设计阶段）：复用 Unturned 原生 `SteamWhitelist` 实现 fail-closed 准入
-- **诊断构建**：`DiagnosticBuildValid` 运行时自检 + D-Vis-* 诊断补丁 + FullFixBuild A/B 对比
+- **SteamID P2P**：客机在原版直连地址栏输入房主个人 SteamID。
+- **IPv4 直连**：用于真实局域网、Radmin LAN 等虚拟局域网。客机输入房主 IPv4 和共享端口。
 
-### 当前版本
+IP 只负责寻址。玩家身份、审批与白名单始终使用 Steam Networking Sockets 握手获取的 SteamID。
 
-| 项 | 值 |
+## 已实现功能
+
+- 无 U3DS 的 listen-host 开房。
+- SteamID P2P 联机，不要求先添加 Steam 好友。
+- IPv4 直连，已通过 Radmin LAN 双机测试。
+- 房主可设置房间名称、最大玩家数、难度、PVP、作弊权限和死亡保留规则。
+- 自动保存上一次启动的房间设置。
+- 新玩家进入世界后先进入 30 秒审批隔离：禁止移动、交互、指令和伤害，并保持受保护状态。
+- 房主直接在原版 `U` 玩家列表中点击“允许/撤销允许”，不需要额外审批窗口。
+- 客机聊天栏以 5 秒间隔显示审批剩余时间。
+- 创意工坊地图与缺失内容下载已通过双机测试。
+- listen-host 自然刷新物品由房主统一生成，避免主客机地面物品不一致和幽灵物品。
+- 运行时 Harmony 注册自检；关键补丁失效时 fail-closed，禁止不安全联机。
+
+## 安装
+
+1. 房主和所有客机都需要安装相同版本的 BepInEx 和 SteamP2PFriends。
+2. 从 [GitHub Releases](https://github.com/YU80Rice/SteamP2PFriends/releases) 下载当前版本的 `SteamP2PFriends.zip`。
+3. 将压缩包解压到 Unturned 游戏根目录。
+4. 确认 DLL 最终位于：
+
+```text
+Unturned/
+└── BepInEx/
+    └── plugins/
+        └── SteamP2PFriends.dll
+```
+
+## 使用方法
+
+### 房主开房
+
+1. 进入原版单人地图选择界面。
+2. 点击插件的“多人联机”。
+3. 设置玩家数、房间难度、PVP、作弊与死亡保留规则。
+4. 复制房主 SteamID，或将房主的 LAN/Radmin IPv4 发送给客机。
+5. 进入世界后，按 `U` 在玩家列表中审批新玩家。
+
+### 客机通过 SteamID 加入
+
+1. 打开“开始游戏 → 直连”。
+2. 在顶部地址栏粘贴房主个人 SteamID。
+3. 点击连接。
+
+插件只接管有效的 Steam 个人账户 ID；U3DS Server Code 仍交给原版处理。
+
+### 客机通过 IPv4 加入
+
+1. 打开“开始游戏 → 直连”。
+2. 输入房主的局域网或 Radmin IPv4。
+3. 端口填写 `27015`。
+4. 插件会跳过 U3DS A2S 查询，将实际游戏数据连接到 UDP `27016`。
+
+Windows 防火墙必须允许 Unturned 在相应网络上使用 UDP `27016`。
+
+## 端口说明
+
+| 端口 | 原版用途 | 当前插件用途 |
+|---|---|---|
+| UDP 27015 | U3DS A2S 查询端口 | 用户分享/输入的逻辑端口；不需要 A2S 应答 |
+| UDP 27016 | 游戏连接端口 | Steam Networking Sockets 实际游戏数据 |
+
+SakuraFRP/公网穿透尚未完成独立动态验收，不属于当前 Beta 通过范围。
+
+## 当前版本
+
+| 项目 | 值 |
 |---|---|
-| 版本 | v0.2.3.37 stage6A-1 |
-| BepInPlugin GUID | `com.yu80rice.steamp2pfriends` |
-| AssemblyVersion | 0.2.3.41 |
-| AssemblyFileVersion | 0.2.3.41 |
-| Stage 6B 测试 DLL SHA-256 | `4C8321018295B1650B7CCF0356EF238F7E358A349046410AC9DF5D6AD3C3A195` |
-| DiagnosticBuildValid | true |
+| BepInPlugin | `0.2.3.56` |
+| AssemblyVersion | `0.2.3.56` |
+| AssemblyFileVersion | `0.2.3.56` |
+| DLL SHA-256 | `1723AFAAE1EB49A5F53B87EA628DA6790F5E317A756D6306A33C3D080F3C9E2F` |
+| 静态测试 | `151/151 PASS` |
+| 发布状态 | Beta Prerelease |
 
-### 当前授权状态（Codex 127th）
+## 已验证与待验证边界
 
-- 🟢 受限封闭 α 部署获准（仅 SteamP2PFriends.dll v0.2.3.37）
-- 🔴 C# 修改、重新编译、认证改动、公开 Beta 发布继续冻结
-- 🔴 不与 LaunchMultiplayerNet / LaunchHordeTracker / LaunchInPlaceReload / LaunchInventoryTidy 同时部署
+已验证：
 
-详见审计清单：[AUDIT_CHECKLIST.md](./AUDIT_CHECKLIST.md) §14.112。
+- SteamID P2P 加入。
+- Radmin LAN IPv4 直连。
+- 30 秒隔离与 `U` 玩家列表审批/撤销。
+- PVP、难度、死亡保留和作弊权限投影。
+- 缺失创意工坊地图/物品的原版下载流程。
+- 地面自然刷新物品的房主权威同步。
 
-## 目录结构
+待验证/已挂起：
 
-```
-SteamP2PFriends/
-├── SteamP2PFriendsPlugin.cs        # BepInEx 入口
-├── SteamP2PFriends.csproj          # 项目文件
-├── Properties/AssemblyInfo.cs      # 程序集信息
-├── Shared/                         # 共享层
-│   ├── SteamRuntime.cs             # 反射绑定
-│   ├── ReflectionUtil.cs           # AccessTools 薄封装
-│   ├── RoleLogger.cs               # [Host]/[Client]/[Shared] 前缀路由
-│   └── Enums/                      # EHostMode / EP2PLobbyState / EJoinState
-├── Host/                           # 房主层
-│   ├── HostManager.cs              # 开房序列核心
-│   ├── HostLobbyService.cs         # Lobby 绑定
-│   ├── HostSteamIdDisplayService.cs# Server Code 显示
-│   ├── GsltInputModal.cs           # GSLT 输入
-│   ├── HasCheatsGuardWatcher.cs    # 反作弊守门
-│   └── SteamGameServerCallbacksWatcher.cs
-├── Client/                         # 客机层
-│   ├── P2PJoinManager.cs           # 连接状态机
-│   ├── SteamIdInputModal.cs        # SteamID 输入
-│   └── ClientLobbyListener.cs      # LobbyGameCreated 回调
-├── Patches/                        # Harmony 补丁
-│   ├── SteamUserP2PRedirectPatch.cs
-│   ├── CallbackCreateGameServerRedirectPatch.cs
-│   ├── LobbiesGameCreatedPatch.cs
-│   ├── SteamworksServerMultiplayerServiceOpenPatch.cs
-│   ├── SteamworksServerMultiplayerServiceClosePatch.cs
-│   ├── ProviderDisconnectPatch.cs
-│   ├── ProviderInitializeDedicatedUGCPatch.cs
-│   ├── MenuPlaySingleplayerUIPatch.cs
-│   ├── ClientMethodLoopbackPatch.cs
-│   ├── LanTestSteamPlayerPatch.cs
-│   └── ProviderRejectDiagnosticPatch.cs
-├── Tools/                          # 辅助工具
-├── AUDIT_CHECKLIST.md              # 审计清单（§14.1 - §14.115）
-├── LICENSE                         # MIT
-├── VIBECODING.md                   # 人机协同开发宣示
-└── CONTRIBUTORS.md                 # 贡献者声明
+- SakuraFRP 与公网 UDP 穿透。
+- 房间设置持久化的下一轮动态冒烟。
+- 背包物品移动/丢弃后的“幽灵图标”报告，当前缺少事发日志，未盲目修改。
+- Steam 付费外观/玩家装饰资产的专项双端指纹验证。
+
+## 从源码构建
+
+需要 Windows、.NET SDK/MSBuild，以及项目 `Libs` 目录中的 Unturned/BepInEx/Harmony 引用。
+
+```powershell
+dotnet msbuild SteamP2PFriends.csproj /t:Rebuild /p:Configuration=Release
+dotnet msbuild WhitelistTests/SteamP2PFriends.WhitelistTests.csproj /t:Rebuild /p:Configuration=Release
+./WhitelistTests/bin/Release/SteamP2PFriends.WhitelistTests.exe
 ```
 
-## 开发模式
+## 文档
 
-本项目采用 **Vibecoding** 人机协同开发模式。详见 [VIBECODING.md](./VIBECODING.md)。
-
-## 贡献者
-
-本项目由人类导演 YU80Rice 与 AI 导师（Claude / Kimi / Codex）及本地 Agent（Cherry Claw）协同完成。详见 [CONTRIBUTORS.md](./CONTRIBUTORS.md)。
+- [CHANGELOG.md](./CHANGELOG.md)：发布变更。
+- [AUDIT_CHECKLIST.md](./AUDIT_CHECKLIST.md)：当前裁决摘要与历史审计记录。
+- [DEDICATED_SYNC_COMPARISON_CHECKLIST.md](./DEDICATED_SYNC_COMPARISON_CHECKLIST.md)：U3DS 权威实现的历史对照参考。
+- [VIBECODING.md](./VIBECODING.md)：人机协作开发与审计原则。
+- [CONTRIBUTORS.md](./CONTRIBUTORS.md)：贡献者与工具声明。
 
 ## 许可证
 

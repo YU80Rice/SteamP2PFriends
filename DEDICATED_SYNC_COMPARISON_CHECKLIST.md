@@ -1,5 +1,9 @@
 # Dedicated Server 原版同步行为与 P2P Listen Host 对照清单
 
+> **2026-08-10 状态说明**：本文档保留为 U3DS 权威实现与 listen-host 适配的历史对照资料。SteamP2PFriends 当前产品路线不启动 U3DS，而是在严格 P2P Host 门控下复用原版服务端权威分支。本文中的旧阻断项不得直接视为 `0.2.3.56` 的当前发布状态；请以 [README.md](./README.md)、[CHANGELOG.md](./CHANGELOG.md) 和 [AUDIT_CHECKLIST.md](./AUDIT_CHECKLIST.md) 页首为准。
+
+---
+
 **文档性质**：状态同步阶段的强制审计基准（Living Checklist）  
 **适用项目**：SteamP2PFriends  
 **建立日期**：2026-07-24  
