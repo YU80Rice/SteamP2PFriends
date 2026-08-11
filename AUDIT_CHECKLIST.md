@@ -1,6 +1,6 @@
 # AUDIT_CHECKLIST.md - SteamP2PFriends 审计历史
 
-> **当前权威状态（2026-08-10）**：`0.2.3.56` Beta Prerelease，`151/151` 静态测试通过。SteamID P2P、Radmin LAN IPv4 直连、30 秒隔离审批、U 玩家列表允许/撤销、房间规则与地面自然刷新物品权威已通过相应动态验证。SakuraFRP、背包幽灵图标、Steam 外观资产专项验证仍未关闭。
+> **当前权威状态（2026-08-10）**：`0.2.3.56` Beta Prerelease，`151/151` 静态测试通过。SteamID P2P、Radmin LAN IPv4 直连、30 秒隔离审批、原版玩家列表（默认 `P`）允许/撤销、房间规则与地面自然刷新物品权威已通过相应动态验证。SakuraFRP、背包幽灵图标、Steam 外观资产专项验证仍未关闭。
 >
 > 以下内容是从早期版本开始的追加式审计历史，其中的“当前冻结”、旧版本号和旧禁止项只适用于当时阶段，不覆盖上述当前裁决。面向用户的当前说明请阅读 [README.md](./README.md) 和 [CHANGELOG.md](./CHANGELOG.md)。
 
