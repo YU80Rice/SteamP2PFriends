@@ -3,7 +3,7 @@
 > 为 Unturned 提供无 U3DS 的便捷 listen-host 联机，同时支持 SteamID P2P 和 IPv4 直连。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
-[![Version](https://img.shields.io/badge/version-0.2.3.60-blue.svg)](https://github.com/YU80Rice/SteamP2PFriends/releases/tag/v0.2.3.60)
+[![Version](https://img.shields.io/badge/version-0.2.3.60--beta.1-blue.svg)](https://github.com/YU80Rice/SteamP2PFriends/releases/tag/v0.2.3.60-beta.1)
 [![Status](https://img.shields.io/badge/status-Beta%20Prerelease-orange.svg)](https://github.com/YU80Rice/SteamP2PFriends/releases)
 
 ## 项目简介
@@ -100,7 +100,8 @@ Windows 防火墙必须允许 Unturned 在相应网络上使用 UDP `27016`。
 | DLL SHA-256 | `03565C7E99804FF4AC5E980E766C52DFEB00E41F10BE34B388F8EBC9A417CE11` |
 | 静态测试 | `261/261 PASS` |
 | 双机总回归 | `Final-Beta-Test-20260813-1300`：PASS |
-| 发布状态 | Beta Prerelease |
+| 发布标识 | `v0.2.3.60-beta.1` |
+| 发布状态 | Beta 1（首个公开 Beta 测试版本） |
 
 ## 已验证边界与免责声明
 
