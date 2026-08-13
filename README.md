@@ -3,7 +3,7 @@
 > 为 Unturned 提供无 U3DS 的便捷 listen-host 联机，同时支持 SteamID P2P 和 IPv4 直连。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
-[![Version](https://img.shields.io/badge/version-0.2.3.56-blue.svg)](https://github.com/YU80Rice/SteamP2PFriends/releases/tag/v0.2.3.56)
+[![Version](https://img.shields.io/badge/version-0.2.3.60-blue.svg)](https://github.com/YU80Rice/SteamP2PFriends/releases/tag/v0.2.3.60)
 [![Status](https://img.shields.io/badge/status-Beta%20Prerelease-orange.svg)](https://github.com/YU80Rice/SteamP2PFriends/releases)
 
 ## 项目简介
@@ -67,32 +67,42 @@ Unturned/
 
 1. 打开“开始游戏 → 直连”。
 2. 输入房主的局域网或 Radmin IPv4。
-3. 端口填写 `27015`。
-4. 插件会跳过 U3DS A2S 查询，将实际游戏数据连接到 UDP `27016`。
+3. 端口填写房主实际监听的 UDP 端口（局域网/Radmin 默认 `27016`）。
+4. 插件会跳过 U3DS A2S 查询，直接连接该 UDP 端口（单端口语义，query 与 connection 端口相同）。
 
 Windows 防火墙必须允许 Unturned 在相应网络上使用 UDP `27016`。
+
+### SakuraFRP / 公网穿透（诊断候选）
+
+1. 房主在 SakuraFRP 创建 **一条** UDP 隧道：本地 `127.0.0.1:27016` → 远端 UDP 端口 `R`。
+2. 客机打开“开始游戏 → 直连”，输入 Sakura 节点分配的**域名**或数值 IPv4，端口填远端端口 `R`。
+3. 若 SakuraFRP 只提供随机域名（无法稳定取得节点 IPv4），勾选直连页的 **“插件域名直连（FRP）”**，插件会将域名解析为 IPv4 并直接连接填写的 UDP 端口（跳过原版 U3DS/A2S 查询）。
+4. 插件不会自动把端口改成 `27016` 或计算 `R±1`；输入的就是实际可达端口。
+
+> ⚠️ SakuraFRP 公网 UDP 穿透依赖第三方网络环境；本次 Beta 总回归已完成项目侧 P2P/IPv4/域名直连流程验证，但不保证第三方节点、运营商网络或 NAT 环境始终可用。
 
 ## 端口说明
 
 | 端口 | 原版用途 | 当前插件用途 |
 |---|---|---|
-| UDP 27015 | U3DS A2S 查询端口 | 用户分享/输入的逻辑端口；不需要 A2S 应答 |
-| UDP 27016 | 游戏连接端口 | Steam Networking Sockets 实际游戏数据 |
+| UDP 27015 | U3DS A2S 查询端口 | 不再作为客机输入端口使用（无 A2S 应答器） |
+| UDP 27016 | 游戏连接端口 | Steam Networking Sockets 实际游戏数据；局域网/Radmin 客机输入此端口 |
 
-SakuraFRP/公网穿透尚未完成独立动态验收，不属于当前 Beta 通过范围。
+单端口语义：客机输入的端口既是 query 端口也是 connection 端口。SakuraFRP 可将任意远端 UDP 端口 `R` 映射到房主本地 `27016`。开启“插件域名直连（FRP）”后，域名由玩家填写、端口为实际可达 UDP 端口，不写死任何供应商域名。
 
 ## 当前版本
 
 | 项目 | 值 |
 |---|---|
-| BepInPlugin | `0.2.3.56` |
-| AssemblyVersion | `0.2.3.56` |
-| AssemblyFileVersion | `0.2.3.56` |
-| DLL SHA-256 | `1723AFAAE1EB49A5F53B87EA628DA6790F5E317A756D6306A33C3D080F3C9E2F` |
-| 静态测试 | `151/151 PASS` |
+| BepInPlugin | `0.2.3.60` |
+| AssemblyVersion | `0.2.3.60` |
+| AssemblyFileVersion | `0.2.3.60` |
+| DLL SHA-256 | `03565C7E99804FF4AC5E980E766C52DFEB00E41F10BE34B388F8EBC9A417CE11` |
+| 静态测试 | `261/261 PASS` |
+| 双机总回归 | `Final-Beta-Test-20260813-1300`：PASS |
 | 发布状态 | Beta Prerelease |
 
-## 已验证与待验证边界
+## 已验证边界与免责声明
 
 已验证：
 
@@ -103,12 +113,12 @@ SakuraFRP/公网穿透尚未完成独立动态验收，不属于当前 Beta 通�
 - 缺失创意工坊地图/物品的原版下载流程。
 - 地面自然刷新物品的房主权威同步。
 
-待验证/已挂起：
+已验证边界与免责声明：
 
-- SakuraFRP 与公网 UDP 穿透。
-- 房间设置持久化的下一轮动态冒烟。
-- 背包物品移动/丢弃后的“幽灵图标”报告，当前缺少事发日志，未盲目修改。
-- Steam 付费外观/玩家装饰资产的专项双端指纹验证。
+- 本版本通过 P2P Beta 总回归，证据归档于 `Final-Beta-Test-20260813-1300`。
+- SakuraFRP/公网穿透的最终可用性受第三方节点、NAT、运营商和防火墙影响；测试通过不构成网络可达性保证。
+- Steam 付费外观、第三方内容和未安装资源的表现取决于双方本地资源与原版下载机制，不构成插件对第三方资产的担保。
+- 本插件为 Beta 预发布版本，可能包含未覆盖的地图、模组、网络环境或 Unturned 更新兼容性问题；使用者应备份存档并自行承担联机、数据丢失和服务中断风险。
 
 ## 从源码构建
 

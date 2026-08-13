@@ -24,6 +24,9 @@ namespace SteamP2PFriends.WhitelistTests
         private const string H3_HARMONY_ID = "com.yu80rice.steamp2pfriends.test.h3";
         private const string H4_HARMONY_ID = "com.yu80rice.steamp2pfriends.test.h4";
         private const string H6_HARMONY_ID = "com.yu80rice.steamp2pfriends.test.h6";
+        private const string H9_HARMONY_ID = "com.yu80rice.steamp2pfriends.test.h9.stage92";
+        private const string H10_HARMONY_ID = "com.yu80rice.steamp2pfriends.test.h10.stage10death";
+        private const string H11_HARMONY_ID = "com.yu80rice.steamp2pfriends.test.h11.stage10avatar";
 
         // H2 测试目标方法（签名与 Provider.reject 一致，便于复用 Prefix MethodInfo 验证机制）
         // 标记为 public static void 以匹配 Harmony Prefix 注入约定
@@ -44,6 +47,22 @@ namespace SteamP2PFriends.WhitelistTests
             ESteamRejection rejection,
             string explanation)
         {
+        }
+
+        public static void H10DeathCommitTarget(byte amount, UnityEngine.Vector3 newRagdoll,
+            EDeathCause newCause, ELimb newLimb, CSteamID newKiller, out EPlayerKill kill,
+            bool trackKill, ERagdollEffect newRagdollEffect, bool canCauseBleeding)
+        {
+            kill = EPlayerKill.NONE;
+        }
+
+        // Stage 9-2 H9 surrogate: signature-equivalent to vanilla TryGetQueryPort(out ushort).
+        // Independent test CLR cannot detour the game assembly method, so this surrogate anchors
+        // the real Harmony binding of the production Postfix (ref bool __result + ref ushort __0).
+        public static bool H9QueryPortTarget(out ushort queryPort)
+        {
+            queryPort = 27015;
+            return true;
         }
 
         internal static bool Test_v3_Harmony_Metadata_SelfCheck()
@@ -358,6 +377,141 @@ namespace SteamP2PFriends.WhitelistTests
                 Exception root = ex;
                 while (root.InnerException != null) root = root.InnerException;
                 return Fail("item authority gate target resolution threw", root.GetType().Name + ": " + root.Message);
+            }
+        }
+
+        /// <summary>
+        /// H9（Stage 9-2 [指令 D]）：真实 Harmony 激活测试，证明生产
+        /// DirectIpSinglePortQueryPortPatch.Postfix（ref bool __result + ref ushort __0）
+        /// 能被 Harmony 真正绑定和登记，并用 GetPatchInfo 核验专用 owner + 生产 Postfix MethodInfo。
+        /// 独立 CLR 不能 detour 游戏程序集方法，因此先验证真实 TargetMethod() 解析，
+        /// 再用等价签名的 H9QueryPortTarget surrogate 验证生产 Postfix 的 Harmony 绑定。
+        /// </summary>
+        internal static bool Test_H9_Stage92QueryPortPostfixActivates()
+        {
+            MethodBase realOriginal = DirectIpSinglePortQueryPortPatch.TargetMethod();
+            if (realOriginal == null ||
+                realOriginal.DeclaringType != typeof(
+                    SDG.NetTransport.SteamNetworkingSockets.ClientTransport_SteamNetworkingSockets))
+                return Fail("Stage9-2 real target resolution failed", "null/wrong type");
+
+            ParameterInfo[] realParameters = realOriginal.GetParameters();
+            if (realParameters.Length != 1 ||
+                realParameters[0].ParameterType != typeof(ushort).MakeByRefType())
+                return Fail("Stage9-2 real target ABI mismatch", realOriginal.ToString());
+
+            MethodInfo productionPostfix = typeof(DirectIpSinglePortQueryPortPatch).GetMethod(
+                nameof(DirectIpSinglePortQueryPortPatch.Postfix),
+                BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
+            MethodInfo surrogate = typeof(HarmonyMetadataTests).GetMethod(
+                nameof(H9QueryPortTarget), BindingFlags.Static | BindingFlags.Public);
+            if (productionPostfix == null || surrogate == null)
+                return Fail("Stage9-2 activation methods missing", "postfix/surrogate null");
+
+            Harmony harmony = new Harmony(H9_HARMONY_ID);
+            try
+            {
+                harmony.Patch(surrogate, postfix: new HarmonyMethod(productionPostfix));
+                HarmonyLib.Patches info = Harmony.GetPatchInfo(surrogate);
+                bool exact = info != null && info.Postfixes.Any(p =>
+                    p.owner == H9_HARMONY_ID && p.PatchMethod == productionPostfix);
+                if (!exact)
+                    return Fail("Stage9-2 production Postfix not active", "owner/method missing");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Exception root = ex;
+                while (root.InnerException != null) root = root.InnerException;
+                return Fail("Stage9-2 Harmony binding failed",
+                    root.GetType().Name + ": " + root.Message);
+            }
+            finally
+            {
+                try { harmony.Unpatch(surrogate, HarmonyPatchType.All, H9_HARMONY_ID); }
+                catch { }
+            }
+        }
+
+        internal static bool Test_H10_Stage10DeathCommitPatchActivates()
+        {
+            MethodBase realOriginal = P2PWorldDeathCommitPatch.TargetMethod();
+            if (realOriginal == null || realOriginal.DeclaringType != typeof(PlayerLife) ||
+                realOriginal.Name != "doDamage")
+                return Fail("Stage10 death commit real target resolution failed", "null/wrong target");
+
+            MethodInfo productionPrefix = typeof(P2PWorldDeathCommitPatch).GetMethod(
+                nameof(P2PWorldDeathCommitPatch.Prefix),
+                BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
+            MethodInfo productionPostfix = typeof(P2PWorldDeathCommitPatch).GetMethod(
+                nameof(P2PWorldDeathCommitPatch.Postfix),
+                BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
+            MethodInfo surrogate = typeof(HarmonyMetadataTests).GetMethod(
+                nameof(H10DeathCommitTarget), BindingFlags.Static | BindingFlags.Public);
+            if (productionPrefix == null || productionPostfix == null || surrogate == null)
+                return Fail("Stage10 death commit activation methods missing", "prefix/postfix/surrogate null");
+
+            Harmony harmony = new Harmony(H10_HARMONY_ID);
+            try
+            {
+                harmony.Patch(surrogate, new HarmonyMethod(productionPrefix),
+                    new HarmonyMethod(productionPostfix));
+                HarmonyLib.Patches info = Harmony.GetPatchInfo(surrogate);
+                bool prefixExact = info != null && info.Prefixes.Any(p =>
+                    p.owner == H10_HARMONY_ID && p.PatchMethod == productionPrefix);
+                bool postfixExact = info != null && info.Postfixes.Any(p =>
+                    p.owner == H10_HARMONY_ID && p.PatchMethod == productionPostfix);
+                return prefixExact && postfixExact;
+            }
+            catch (Exception ex)
+            {
+                Exception root = ex;
+                while (root.InnerException != null) root = root.InnerException;
+                return Fail("Stage10 death commit Harmony binding failed",
+                    root.GetType().Name + ": " + root.Message);
+            }
+            finally
+            {
+                try { harmony.Unpatch(surrogate, HarmonyPatchType.All, H10_HARMONY_ID); }
+                catch { }
+            }
+        }
+
+        internal static bool Test_H11_Stage10AvatarPatchActivates()
+        {
+            MethodInfo productionPrefix = typeof(P2PWorldChatAvatarPatch).GetMethod(
+                nameof(P2PWorldChatAvatarPatch.PrefixProject),
+                BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
+            MethodBase[] targets = P2PWorldChatAvatarPatch.TargetMethods().ToArray();
+            if (productionPrefix == null || targets.Length != 2 || targets.Any(t => t == null))
+                return Fail("Stage10 avatar activation methods missing", "prefix/targets invalid");
+
+            Harmony harmony = new Harmony(H11_HARMONY_ID);
+            try
+            {
+                foreach (MethodBase target in targets)
+                    harmony.Patch(target, new HarmonyMethod(productionPrefix));
+                return targets.All(target =>
+                {
+                    HarmonyLib.Patches info = Harmony.GetPatchInfo(target);
+                    return info != null && info.Prefixes.Any(p =>
+                        p.owner == H11_HARMONY_ID && p.PatchMethod == productionPrefix);
+                });
+            }
+            catch (Exception ex)
+            {
+                Exception root = ex;
+                while (root.InnerException != null) root = root.InnerException;
+                return Fail("Stage10 avatar Harmony binding failed",
+                    root.GetType().Name + ": " + root.Message);
+            }
+            finally
+            {
+                foreach (MethodBase target in targets)
+                {
+                    try { harmony.Unpatch(target, HarmonyPatchType.All, H11_HARMONY_ID); }
+                    catch { }
+                }
             }
         }
 

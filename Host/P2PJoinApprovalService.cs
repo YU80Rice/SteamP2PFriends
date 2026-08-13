@@ -365,6 +365,14 @@ namespace SteamP2PFriends.Host
                 }
                 RoleLogger.Info("[Host]",
                     $"[P2P-Approval] Approve success: steamId={steamId.m_SteamID}");
+
+                // Stage 10 指令 B: broadcast ONLY after the full transaction committed
+                // (TryAdd persisted + ReleaseAfterPersistentApproval success + pending/suppressed
+                // cleanup). Any earlier failure returns false above and never broadcasts. A
+                // broadcaster exception must not block or change the approval outcome.
+                try { P2PWorldStatusBroadcaster.OnPlayerApproved(steamId); }
+                catch (Exception bcEx) { RoleLogger.Warn("[Host]", $"[WorldBroadcast] approval notify failed: {bcEx.GetType().Name}"); }
+
                 return true;
             }
 

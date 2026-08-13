@@ -184,13 +184,13 @@ namespace SteamP2PFriends.WhitelistTests
                    prefix.ReturnType == typeof(bool) && prefixParameters.Length == 4;
         }
 
-        internal static bool Test_R15_DirectIpEndpointUsesQueryPortPlusOne()
+        internal static bool Test_R15_DirectIpEndpointUsesSinglePort()
         {
             bool ok = UnifiedJoinAddressClassifier.TryBuildDirectIpEndpoint(
-                "26.196.34.90", 27015, out Unturned.SystemEx.IPv4Address address,
+                "26.196.34.90", 27016, out Unturned.SystemEx.IPv4Address address,
                 out ushort queryPort, out ushort connectionPort);
             return ok && address.ToString() == "26.196.34.90" &&
-                   queryPort == 27015 && connectionPort == 27016;
+                   queryPort == 27016 && connectionPort == 27016;
         }
 
         internal static bool Test_R16_DirectIpInlinePortOverridesField()
@@ -198,15 +198,13 @@ namespace SteamP2PFriends.WhitelistTests
             bool ok = UnifiedJoinAddressClassifier.TryBuildDirectIpEndpoint(
                 "192.168.1.25:28015", 27015, out _, out ushort queryPort,
                 out ushort connectionPort);
-            return ok && queryPort == 28015 && connectionPort == 28016;
+            return ok && queryPort == 28015 && connectionPort == 28015;
         }
 
-        internal static bool Test_R17_DirectIpRejectsUnsafePortsAndNonIpHosts()
+        internal static bool Test_R17_DirectIpRejectsZeroPortAndNonIpHosts()
         {
             return !UnifiedJoinAddressClassifier.TryBuildDirectIpEndpoint(
                        "26.196.34.90", 0, out _, out _, out _) &&
-                   !UnifiedJoinAddressClassifier.TryBuildDirectIpEndpoint(
-                       "26.196.34.90:65535", 27015, out _, out _, out _) &&
                    !UnifiedJoinAddressClassifier.TryBuildDirectIpEndpoint(
                        "example.com", 27015, out _, out _, out _) &&
                    !UnifiedJoinAddressClassifier.TryBuildDirectIpEndpoint(
@@ -248,6 +246,135 @@ namespace SteamP2PFriends.WhitelistTests
                    P2PNativeMenuUI.NormalizePersistedModeForTest(EGameMode.NORMAL) == EGameMode.NORMAL &&
                    P2PNativeMenuUI.NormalizePersistedModeForTest(EGameMode.HARD) == EGameMode.HARD &&
                    P2PNativeMenuUI.NormalizePersistedModeForTest((EGameMode)255) == EGameMode.EASY;
+        }
+
+        // ===== Stage 9-2: SakuraFRP single-port Direct-IP =====
+
+        internal static bool Test_R21_SinglePortLanEndpoint()
+        {
+            bool ok = UnifiedJoinAddressClassifier.TryBuildDirectIpEndpoint(
+                "26.196.34.90", 27016, out _, out ushort queryPort, out ushort connectionPort);
+            return ok && queryPort == 27016 && connectionPort == 27016;
+        }
+
+        internal static bool Test_R22_SinglePortInlineOverride()
+        {
+            bool ok = UnifiedJoinAddressClassifier.TryBuildDirectIpEndpoint(
+                "192.168.1.25:31567", 27015, out _, out ushort queryPort,
+                out ushort connectionPort);
+            return ok && queryPort == 31567 && connectionPort == 31567;
+        }
+
+        internal static bool Test_R23_SinglePortMaxPortValid()
+        {
+            bool maxOk = UnifiedJoinAddressClassifier.TryBuildDirectIpEndpoint(
+                "26.196.34.90", 65535, out _, out ushort maxQuery,
+                out ushort maxConnection);
+            bool zeroRejected = !UnifiedJoinAddressClassifier.TryBuildDirectIpEndpoint(
+                "26.196.34.90", 0, out _, out _, out _);
+            return maxOk && maxQuery == 65535 && maxConnection == 65535 && zeroRejected;
+        }
+
+        internal static bool Test_R24_SinglePortParametersPredicate()
+        {
+            bool ok = UnifiedJoinAddressClassifier.TryBuildDirectIpEndpoint(
+                "26.196.34.90", 27016, out Unturned.SystemEx.IPv4Address address,
+                out ushort queryPort, out ushort connectionPort);
+            if (!ok) return false;
+
+            ServerConnectParameters single = new ServerConnectParameters(address, queryPort, connectionPort, "");
+            bool singleOk = UnifiedJoinAddressClassifier.IsSinglePortDirectIpParameters(single);
+
+            ServerConnectParameters queryPlusOne = new ServerConnectParameters(
+                address, (ushort)(queryPort - 1), connectionPort, "");
+            bool dualOk = !UnifiedJoinAddressClassifier.IsSinglePortDirectIpParameters(queryPlusOne);
+
+            ServerConnectParameters zeroConnection = new ServerConnectParameters(address, queryPort, 0, "");
+            bool zeroOk = !UnifiedJoinAddressClassifier.IsSinglePortDirectIpParameters(zeroConnection);
+
+            ServerConnectParameters nullParams = null;
+            bool nullOk = !UnifiedJoinAddressClassifier.IsSinglePortDirectIpParameters(nullParams);
+
+            return singleOk && dualOk && zeroOk && nullOk;
+        }
+
+        internal static bool Test_R25_QueryPortProjectionMatrix()
+        {
+            // originalResult=false -> never fabricate success.
+            if (DirectIpSinglePortQueryPortPatch.ProjectForTest(
+                    false, 27015, true, 27016, out _) != false) return false;
+
+            // non-single-port -> unchanged.
+            if (DirectIpSinglePortQueryPortPatch.ProjectForTest(
+                    true, 27015, false, 27015, out ushort unchanged) != true) return false;
+            if (unchanged != 27015) return false;
+
+            // single-port -> project to R (sharedPort).
+            if (DirectIpSinglePortQueryPortPatch.ProjectForTest(
+                    true, 31566, true, 31567, out ushort projected) != true) return false;
+            if (projected != 31567) return false;
+
+            // single-port with sharedPort == 0 -> unchanged (guard).
+            if (DirectIpSinglePortQueryPortPatch.ProjectForTest(
+                    true, 27015, true, 0, out ushort zeroShared) != true) return false;
+            return zeroShared == 27015;
+        }
+
+        internal static bool Test_R26_QueryPortPatchAbiExact()
+        {
+            MethodBase original = DirectIpSinglePortQueryPortPatch.TargetMethod();
+            if (original == null || original.Name != "TryGetQueryPort") return false;
+            if (original.DeclaringType != typeof(SDG.NetTransport.SteamNetworkingSockets.ClientTransport_SteamNetworkingSockets))
+                return false;
+
+            ParameterInfo[] originalParams = original.GetParameters();
+            if (originalParams.Length != 1 ||
+                originalParams[0].ParameterType != typeof(ushort).MakeByRefType())
+                return false;
+
+            MethodInfo postfix = typeof(DirectIpSinglePortQueryPortPatch).GetMethod(
+                nameof(DirectIpSinglePortQueryPortPatch.Postfix),
+                BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
+            if (postfix == null || postfix.ReturnType != typeof(void)) return false;
+
+            ParameterInfo[] postfixParams = postfix.GetParameters();
+            if (postfixParams.Length != 2 ||
+                postfixParams[0].ParameterType != typeof(bool).MakeByRefType() ||
+                postfixParams[1].ParameterType != typeof(ushort).MakeByRefType())
+                return false;
+
+            MethodInfo project = typeof(DirectIpSinglePortQueryPortPatch).GetMethod(
+                nameof(DirectIpSinglePortQueryPortPatch.ProjectForTest),
+                BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+            return project != null && project.ReturnType == typeof(bool) &&
+                   project.GetParameters().Length == 5;
+        }
+
+        internal static bool Test_R27_VanillaAndSteamIdRoutesUnaffected()
+        {
+            // Individual SteamID still routes to P2P.
+            ulong raw = new CSteamID(new AccountID_t(123456U), EUniverse.k_EUniversePublic,
+                EAccountType.k_EAccountTypeIndividual).m_SteamID;
+            bool steamP2P = UnifiedJoinAddressClassifier.Classify(raw.ToString(), out ulong parsed) ==
+                            UnifiedJoinAddressKind.SteamP2P && parsed == raw;
+
+            // Game server code stays vanilla.
+            ulong gsRaw = new CSteamID(new AccountID_t(123U), 304930U,
+                EUniverse.k_EUniversePublic, EAccountType.k_EAccountTypeGameServer).m_SteamID;
+            bool gameServer = UnifiedJoinAddressClassifier.Classify(gsRaw.ToString(), out _) ==
+                              UnifiedJoinAddressKind.Vanilla;
+
+            // DNS / URL stay vanilla.
+            bool dns = UnifiedJoinAddressClassifier.Classify("example.com", out _) ==
+                       UnifiedJoinAddressKind.Vanilla;
+            bool url = UnifiedJoinAddressClassifier.Classify("http://127.0.0.1:27015", out _) ==
+                       UnifiedJoinAddressKind.Vanilla;
+
+            // Non-numeric / non-SteamID text stays vanilla.
+            bool nonNumeric = UnifiedJoinAddressClassifier.Classify("server-name", out _) ==
+                              UnifiedJoinAddressKind.Vanilla;
+
+            return steamP2P && gameServer && dns && url && nonNumeric;
         }
     }
 }

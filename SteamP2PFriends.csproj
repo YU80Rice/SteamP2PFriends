@@ -100,6 +100,7 @@
     <Compile Include="Shared\P2PClientUiEnvironment.cs" />
     <Compile Include="Shared\SteamPersonaDisplay.cs" />
     <Compile Include="Shared\UnifiedJoinAddressClassifier.cs" />
+    <Compile Include="Shared\P2PWorldStatusTemplates.cs" />
     <Compile Include="Shared\DiagnosticContext.cs" />
     <Compile Include="Shared\Enums\EHostMode.cs" />
     <Compile Include="Shared\Enums\EP2PLobbyState.cs" />
@@ -111,6 +112,7 @@
     <Compile Include="Host\P2PRoomRules.cs" />
     <Compile Include="Host\P2PSessionAdminPolicy.cs" />
     <Compile Include="Host\Stage6ASaveRoundtripObserver.cs" />
+    <Compile Include="Host\P2PWorldStatusBroadcaster.cs" />
     <Compile Include="Host\Stage6BWorkshopSession.cs" />
     <Compile Include="Host\MasterBundleHashInitializer.cs" />
     <Compile Include="Host\P2PLobbyManager.cs" />
@@ -134,6 +136,7 @@
     <Compile Include="Patches\SteamworksServerMultiplayerServiceClosePatch.cs" />
     <Compile Include="Patches\MenuPlaySingleplayerUIPatch.cs" />
     <Compile Include="Patches\MenuPlayConnectP2PRoutePatch.cs" />
+    <Compile Include="Patches\DirectIpSinglePortQueryPortPatch.cs" />
     <Compile Include="Patches\SteamNetworkingRouteDiagnosticsPatch.cs" />
     <Compile Include="Patches\ServerTransportInitializeDiagnosticPatch.cs" />
     <Compile Include="Patches\UnityLogBridgePatch.cs" />
@@ -153,6 +156,8 @@
     <Compile Include="Patches\P2PPendingIdentityCapturePatch.cs" />
     <Compile Include="Patches\P2PRejectPendingIdentityCapturePatch.cs" />
     <Compile Include="Patches\P2PQuarantineAdmissionPatches.cs" />
+    <Compile Include="Patches\P2PWorldDeathCommitPatch.cs" />
+    <Compile Include="Patches\P2PWorldChatAvatarPatch.cs" />
     <Compile Include="Patches\P2PQuarantineClientInputPatch.cs" />
     <Compile Include="Patches\P2PListenHostCommandPermissionPatch.cs" />
     <Compile Include="Patches\ProviderAcceptStageDiagnosticPatch.cs" />
@@ -194,11 +199,14 @@
     <Compile Include="Patches\RemotePlayerClothingVisibleBridgePatch.cs" />
     <Compile Include="Patches\PlayerManagerBroadcastDiagnosticPatch.cs" />
     <Compile Include="Client\ClientRemotePlayerRenderProbe.cs" />
+    <Compile Include="Client\ExplicitDnsDirectIpController.cs" />
+    <Compile Include="Client\SystemDnsResolveBackend.cs" />
     <Compile Include="Shared\DiagnosticMaskUtil.cs" />
     <Compile Include="Patches\WorldSyncDiagnosticCore.cs" />
     <Compile Include="Patches\ItemManagerWorldSyncDiagnosticPatch.cs" />
     <Compile Include="Patches\AuthoritativeItemGenerationGatePatch.cs" />
     <Compile Include="Patches\InventoryWorldAuthorityProbe.cs" />
+    <Compile Include="Patches\ListenHostInventoryUiProjectionPatch.cs" />
     <Compile Include="Patches\ResourceManagerWorldSyncDiagnosticPatch.cs" />
     <Compile Include="Patches\ObjectManagerWorldSyncDiagnosticPatch.cs" />
     <Compile Include="Patches\VehicleManagerWorldSyncDiagnosticPatch.cs" />
@@ -229,6 +237,7 @@
     <Compile Include="UI\P2PPlayerListApprovalDecorator.cs" />
     <Compile Include="UI\P2PHostSessionUI.cs" />
     <Compile Include="UI\P2PPauseMenuSurface.cs" />
+    <Compile Include="UI\ExplicitDnsDirectIpModeUI.cs" />
     <Compile Include="Patches\P2PGroupStateProbe.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>

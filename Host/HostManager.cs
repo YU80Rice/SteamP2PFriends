@@ -108,6 +108,15 @@ namespace SteamP2PFriends.Host
                 return;
             }
 
+            if (!P2PWorldStatusBroadcaster.IsReadyForHostStart)
+            {
+                RoleLogger.Warn("[Host]",
+                    "StartP2PServer rejected: world broadcast activation not ready (state=" +
+                    P2PWorldStatusBroadcaster.ActivationState + ")");
+                try { MenuUI.alert("SteamP2PFriends 正在完成初始化，请稍后重试创建房间。"); } catch { }
+                return;
+            }
+
             if (_isStarting)
             {
                 RoleLogger.Warn("[Host]", "P2P 服务器正在启动中，忽略重复请求。");
@@ -230,6 +239,10 @@ namespace SteamP2PFriends.Host
                 catch (Exception qEx) { RoleLogger.Warn("[Host]", "[P2P-Quarantine] ResetForSession 异常（不阻断）: " + qEx); }
                 try { SteamPersonaDisplay.ResetForSession(); }
                 catch (Exception nameEx) { RoleLogger.Warn("[Host]", "[P2P-Persona] ResetForSession 异常（不阻断）: " + nameEx.GetType().Name); }
+                // Stage 10 指令 J：新会话前清空世界播报会话状态（expected departure/死亡代次/限频窗）。
+                //   不得重复订阅死亡事件；ResetForSession 只清状态。
+                try { P2PWorldStatusBroadcaster.ResetForSession(); }
+                catch (Exception wbEx) { RoleLogger.Warn("[Host]", "[WorldBroadcast] ResetForSession (Start) 异常（不阻断）: " + wbEx.GetType().Name); }
 
                 StartHostingCore();
 
@@ -289,6 +302,15 @@ namespace SteamP2PFriends.Host
                 RoleLogger.Error("[Host]",
                     "!!! StartLanServer 拒绝执行：DiagnosticBuildValid=false（P0-C4 硬门控）!!!");
                 try { MenuUI.alert("SteamP2PFriends 自检未通过，LAN 服务器启动被拒绝。请查看日志。"); } catch { }
+                return;
+            }
+
+            if (!P2PWorldStatusBroadcaster.IsReadyForHostStart)
+            {
+                RoleLogger.Warn("[Host]",
+                    "StartLanServer rejected: world broadcast activation not ready (state=" +
+                    P2PWorldStatusBroadcaster.ActivationState + ")");
+                try { MenuUI.alert("SteamP2PFriends 正在完成初始化，请稍后重试创建房间。"); } catch { }
                 return;
             }
 
@@ -1156,6 +1178,9 @@ namespace SteamP2PFriends.Host
                     catch (Exception qEx) { RoleLogger.Warn("[Host]", "[P2P-Quarantine] ResetAfterSession (Abort) 异常（不阻断）: " + qEx); }
                     try { SteamPersonaDisplay.ResetAfterSession(); }
                     catch (Exception nameEx) { RoleLogger.Warn("[Host]", "[P2P-Persona] ResetAfterSession (Abort) 异常（不阻断）: " + nameEx.GetType().Name); }
+                    // Stage 10 指令 J：会话退出清理世界播报会话状态（不重复订阅）。
+                    try { P2PWorldStatusBroadcaster.ResetForSession(); }
+                    catch (Exception wbEx) { RoleLogger.Warn("[Host]", "[WorldBroadcast] ResetForSession (Exit) 异常（不阻断）: " + wbEx.GetType().Name); }
                 }
             }
         }
@@ -1767,7 +1792,13 @@ namespace SteamP2PFriends.Host
                 RoleLogger.Info("[Host]", $"[P2P] 检测到玩家 {playerName} 连入 (steamID={steamId})");
 
                 // Stage 7-6: atomically promote the ReadyToConnect reservation before any gameplay privilege.
-                P2PQuarantineAdmissionService.PromoteConnected(player);
+                // Stage 10 指令 A: the explicit promotion result is the join-broadcast authority
+                // (AlreadyApproved -> JoinApproved, Activated -> JoinQuarantined, Rejected* -> none).
+                QuarantinePromotionResult promotion = P2PQuarantineAdmissionService.PromoteConnected(player);
+                // Stage 10 指令 D: forward through the existing unique connect callback; do NOT
+                // add a second Provider.onEnemyConnected subscription.
+                try { P2PWorldStatusBroadcaster.OnPlayerConnected(player, promotion); }
+                catch (Exception bcEx) { RoleLogger.Warn("[Host]", $"[WorldBroadcast] connect forward failed: {bcEx.GetType().Name}"); }
 
                 ApplySessionAdminPolicy(player);
             }

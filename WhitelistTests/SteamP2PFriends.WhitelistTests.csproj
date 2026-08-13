@@ -141,7 +141,10 @@
     <Compile Include="Stage7_6Tests.cs" />
     <Compile Include="Stage7_8Tests.cs" />
     <Compile Include="HarmonyMetadataTests.cs" />
+    <Compile Include="ExplicitDnsDirectIpTests.cs" />
+    <Compile Include="Stage10WorldStatusBroadcastTests.cs" />
     <Compile Include="AuthorityGenerationGateTests.cs" />
+    <Compile Include="InventoryUiProjectionTests.cs" />
     <Compile Include="Fakes\FakeWhitelistStore.cs" />
     <Compile Include="Fakes\FakeWhitelistRuntimeContext.cs" />
     <Compile Include="Fakes\FakeWhitelistDisconnectGateway.cs" />

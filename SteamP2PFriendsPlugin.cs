@@ -33,7 +33,7 @@ namespace SteamP2PFriends
     ///   - 不以 Accepted + clients + bitmask 直接宣告真实 GameplayReady
     ///   - watchdog 超时不调 Provider.disconnect / RequestDisconnect
     /// </summary>
-    [BepInPlugin("com.yu80rice.steamp2pfriends", "SteamP2PFriends", "0.2.3.56")]
+    [BepInPlugin("com.yu80rice.steamp2pfriends", "SteamP2PFriends", "0.2.3.60")]
     [BepInDependency("com.yu80rice.launchinventorytidy", BepInDependency.DependencyFlags.SoftDependency)]
     public class SteamP2PFriendsPlugin : BaseUnityPlugin
     {
@@ -88,6 +88,12 @@ namespace SteamP2PFriends
         public static bool Stage76QuarantineRegistrationValid { get; private set; }
         public static bool Stage78UnifiedRegistrationValid { get; private set; }
 
+        /// <summary>Stage 9-2 single-port Direct-IP query projection patch registration gate.</summary>
+        public static bool Stage92SinglePortRegistrationValid { get; private set; }
+
+        /// <summary>Stage 10 world-status broadcast activation gate (P1-05).</summary>
+        public static bool Stage10WorldBroadcastActivationValid { get; private set; } = true;
+
         private Harmony _harmony;
 
         private void Awake()
@@ -124,6 +130,21 @@ namespace SteamP2PFriends
                 "v2 审计 A/B 对照开关：true=完整修复构建（P0-C+P0-E+P1-G+P0-J），false=diag-only+P0-J 单独（A/B 对照用）");
 
             RoleLogger.Initialize(Logger, VerboseLog.Value);
+
+            // Stage 10 v4: Awake can run before Unturned initializes ThreadUtil.gameThread.
+            // Bind configuration and enter Pending here; real subscription is deferred to Update.
+            try
+            {
+                Stage10WorldBroadcastActivationValid = P2PWorldStatusBroadcaster.Initialize(Config);
+                RoleLogger.Info("[Shared]",
+                    "[WorldBroadcast] configuration bound; activation state=" +
+                    P2PWorldStatusBroadcaster.ActivationState);
+            }
+            catch (System.Exception wbEx)
+            {
+                Stage10WorldBroadcastActivationValid = false;
+                RoleLogger.Error("[Shared]", "[WorldBroadcast] initialize threw: " + wbEx.GetType().Name);
+            }
 
             RoleLogger.Info("[Shared]", "============================================");
             RoleLogger.Info("[Shared]", "=== SteamP2PFriends v0.2.3.51 Alpha-1 Natural Item Authority Fix ===");
@@ -360,6 +381,14 @@ namespace SteamP2PFriends
                     "[Stage7-8] !!! unified connect route/indicator registration gate failed");
             }
 
+            // Stage 9-2: single-port Direct-IP query projection patch real Harmony registration gate.
+            Stage92SinglePortRegistrationValid = VerifyStage92SinglePortRegistration();
+            if (!Stage92SinglePortRegistrationValid)
+            {
+                RoleLogger.Error("[Shared]",
+                    "[Stage9-2] !!! single-port Direct-IP query projection registration gate failed");
+            }
+
             VerifyCriticalPatches(redactionSelfTestPassed);
 
             // v0.2.3.7 P0-1 修复（审计 Critical-1）：INVALID 时不得继续初始化可操作的 P2P/UI 入口
@@ -455,6 +484,18 @@ namespace SteamP2PFriends
 
                 if (steamId != 0UL)
                 {
+                    // Stage 10 指令 D + P1-02/P1-06: forward through the existing unique disconnect
+                    // callback BEFORE quarantine cleanup. The broadcaster reads its own session
+                    // projection state (registered only for AlreadyApproved/Activated) and cleans up
+                    // player-level state unconditionally. No second Provider.onEnemyDisconnected
+                    // subscription is added.
+                    try { P2PWorldStatusBroadcaster.OnPlayerDisconnected(player); }
+                    catch (System.Exception bdEx)
+                    {
+                        RoleLogger.Warn("[Host]",
+                            "[WorldBroadcast] disconnect forward failed: " + bdEx.GetType().Name);
+                    }
+
                     try { P2PQuarantineAdmissionService.OnDisconnected(new CSteamID(steamId)); }
                     catch (System.Exception qEx)
                     {
@@ -687,6 +728,33 @@ namespace SteamP2PFriends
 
         private void Update()
         {
+            // Stage 10 v4: activation must run before the INVALID early return so Pending can
+            // self-heal once Unturned's game thread registration becomes available.
+            try
+            {
+                bool stage10Ok = P2PWorldStatusBroadcaster.TryActivateOnGameThread();
+                Stage10WorldBroadcastActivationValid = stage10Ok;
+                if (!stage10Ok)
+                {
+                    DiagnosticBuildValid = false;
+                    RoleLogger.Error("[Shared]",
+                        "[Stage10] activation failed on game thread; P2P entry disabled fail-closed");
+                }
+            }
+            catch (System.Exception ex)
+            {
+                Stage10WorldBroadcastActivationValid = false;
+                DiagnosticBuildValid = false;
+                RoleLogger.Error("[Shared]",
+                    "[Stage10] activation tick threw: " + ex.GetType().Name);
+            }
+
+            // If Unturned has not registered its game thread yet, do not run the rest of the
+            // plugin Update (which contains its own assertIsGameThread contract). A later frame
+            // retries activation, so this is a temporary startup wait rather than a permanent hang.
+            if (P2PWorldStatusBroadcaster.ShouldSuspendPluginUpdate)
+                return;
+
             // v0.2.3.2 P0-8：INVALID 真门控 - 自检失败时禁用所有 P2P 入口
             if (!DiagnosticBuildValid)
             {
@@ -718,6 +786,9 @@ namespace SteamP2PFriends
                 HostManager.TickListen();
                 P2PLobbyManager.Tick();
                 P2PJoinManager.Tick();
+                // Stage 9-3: explicit DNS direct-IP controller. Main-thread drain + commit.
+                // 指令 G: must run from Plugin.Update, not inside any UI Tick/CanTouchClientUi block.
+                SteamP2PFriends.Client.ExplicitDnsDirectIpService.Tick();
 
                 // Stage 7-3 v4 [指令 A]：业务 drain 脱离 HUD。
                 //   不可由 PlayerUI/MenuUI 是否创建决定是否消费 reject queue。
@@ -783,6 +854,12 @@ namespace SteamP2PFriends
                 P2PLobbyManager.Shutdown();
                 ClientLobbyListener.Shutdown();
                 P2PJoinManager.Shutdown();
+                // Stage 9-3 v3 指令 B: unified teardown — cancel any in-flight DNS resolution AND
+                // destroy the DNS toggle UI (restoring the vanilla connect button Y).
+                SteamP2PFriends.Client.ExplicitDnsDirectIpService.Shutdown();
+                // Stage 10 指令 J: symmetric unsubscribe from PlayerLife.onPlayerDied + clear state.
+                try { P2PWorldStatusBroadcaster.Shutdown(); }
+                catch (System.Exception wbEx) { RoleLogger.Warn("[Shared]", "[WorldBroadcast] Shutdown 异常: " + wbEx.GetType().Name); }
                 Patches.UnityLogBridgePatch.Shutdown();
                 // v0.2.3.5 P0-3/P0-5：清理 lifecycle tracker + 禁用原生 SNS 日志
                 SteamP2PFriends.Shared.ConnectionLifecycleTracker.Shutdown();
@@ -969,6 +1046,106 @@ namespace SteamP2PFriends
                 RoleLogger.Info("[Shared]", "[Stage7-8] OK vanilla connect SteamID route + indicator registered");
             }
             return routeOk && indicatorOk;
+        }
+
+        /// <summary>
+        /// Stage 9-2: verifies the single-port Direct-IP query projection patch is really registered
+        /// under our Harmony owner with the exact Postfix MethodInfo (not just attribute presence).
+        /// Failure aggregates into DiagnosticBuildValid=false.
+        /// </summary>
+        private bool VerifyStage92SinglePortRegistration()
+        {
+            MethodBase original = Patches.DirectIpSinglePortQueryPortPatch.TargetMethod();
+            MethodInfo postfix = AccessTools.Method(
+                typeof(Patches.DirectIpSinglePortQueryPortPatch),
+                nameof(Patches.DirectIpSinglePortQueryPortPatch.Postfix));
+
+            bool ok = HasOwnedPatch(original, postfix, false);
+            if (!ok)
+            {
+                RoleLogger.Error("[Shared]",
+                    "[Stage9-2] Direct-IP single-port query projection patch missing " +
+                    "(original=" + (original == null ? "null" : original.Name) +
+                    " postfix=" + (postfix == null ? "null" : postfix.Name) + ")");
+            }
+            else
+            {
+                RoleLogger.Info("[Shared]",
+                    "[Stage9-2] OK single-port Direct-IP query projection registered");
+            }
+            return ok;
+        }
+
+        private bool VerifyStage10DeathCommitRegistration()
+        {
+            MethodBase original = Patches.P2PWorldDeathCommitPatch.TargetMethod();
+            MethodInfo prefix = AccessTools.Method(typeof(Patches.P2PWorldDeathCommitPatch),
+                nameof(Patches.P2PWorldDeathCommitPatch.Prefix));
+            MethodInfo postfix = AccessTools.Method(typeof(Patches.P2PWorldDeathCommitPatch),
+                nameof(Patches.P2PWorldDeathCommitPatch.Postfix));
+
+            bool ok = HasOwnedPatch(original, prefix, true) &&
+                      HasOwnedPatch(original, postfix, false);
+            if (ok)
+                RoleLogger.Info("[Shared]",
+                    "[Stage10] OK authoritative death commit fallback registered");
+            else
+                RoleLogger.Error("[Shared]",
+                    "[Stage10] authoritative death commit fallback registration missing");
+            return ok;
+        }
+
+        private bool VerifyStage10ChatAvatarRegistration()
+        {
+            MethodInfo prefix = AccessTools.Method(typeof(Patches.P2PWorldChatAvatarPatch),
+                nameof(Patches.P2PWorldChatAvatarPatch.PrefixProject));
+            MethodInfo v1 = AccessTools.PropertySetter(typeof(SleekChatEntryV1),
+                "representingChatMessage");
+            MethodInfo v2 = AccessTools.PropertySetter(typeof(SleekChatEntryV2),
+                "representingChatMessage");
+            bool ok = HasOwnedPatch(v1, prefix, true) && HasOwnedPatch(v2, prefix, true);
+            if (ok)
+                RoleLogger.Info("[Shared]", "[Stage10] OK chat avatar projection registered V1+V2");
+            else
+                RoleLogger.Error("[Shared]", "[Stage10] chat avatar projection registration missing");
+            return ok;
+        }
+
+        private bool VerifyInventoryUiProjectionRegistration()
+        {
+            System.Type[] dragArgs =
+            {
+                typeof(byte), typeof(byte), typeof(byte), typeof(byte),
+                typeof(byte), typeof(byte), typeof(byte)
+            };
+            System.Type[] swapArgs =
+            {
+                typeof(byte), typeof(byte), typeof(byte), typeof(byte),
+                typeof(byte), typeof(byte), typeof(byte), typeof(byte)
+            };
+            System.Type[] dropArgs = { typeof(byte), typeof(byte), typeof(byte) };
+
+            MethodInfo drag = AccessTools.Method(typeof(PlayerInventory),
+                nameof(PlayerInventory.ReceiveDragItem), dragArgs);
+            MethodInfo swap = AccessTools.Method(typeof(PlayerInventory),
+                nameof(PlayerInventory.ReceiveSwapItem), swapArgs);
+            MethodInfo drop = AccessTools.Method(typeof(PlayerInventory),
+                nameof(PlayerInventory.ReceiveDropItem), dropArgs);
+
+            bool ok = Patches.ListenHostInventoryUiProjectionPatch.ReflectionContractAvailable &&
+                      HasOwnedPatch(drag,
+                          Patches.ListenHostInventoryUiProjectionPatch.DragPostfix, false) &&
+                      HasOwnedPatch(swap,
+                          Patches.ListenHostInventoryUiProjectionPatch.SwapPostfix, false) &&
+                      HasOwnedPatch(drop,
+                          Patches.ListenHostInventoryUiProjectionPatch.DropPostfix, false);
+            if (ok)
+                RoleLogger.Info("[Shared]",
+                    "[InventoryUI-Reconcile] OK listen-host drag/swap/drop projection repair registered");
+            else
+                RoleLogger.Error("[Shared]",
+                    "[InventoryUI-Reconcile] projection repair registration or reflection contract missing");
+            return ok;
         }
 
         /// <summary>
@@ -2431,6 +2608,65 @@ namespace SteamP2PFriends
             catch (System.Exception ex)
             {
                 RoleLogger.Error("[Shared]", "[Stage7-8] registration aggregate failed: " + ex.Message);
+                allOk = false;
+            }
+
+            // Stage 9-2: single-port Direct-IP query projection gate aggregates into DiagnosticBuildValid.
+            try
+            {
+                if (!Stage92SinglePortRegistrationValid)
+                {
+                    RoleLogger.Error("[Shared]",
+                        "[Stage9-2] !!! DIAGNOSTIC BUILD INVALID: single-port Direct-IP query projection gate failed");
+                    allOk = false;
+                }
+                else
+                {
+                    RoleLogger.Info("[Shared]",
+                        "[Stage9-2] OK single-port Direct-IP query projection active");
+                }
+            }
+            catch (System.Exception ex)
+            {
+                RoleLogger.Error("[Shared]", "[Stage9-2] registration aggregate failed: " + ex.Message);
+                allOk = false;
+            }
+
+            // Stage 10 v4: Pending during Awake is valid. Only a real deferred activation failure
+            // makes the diagnostic build invalid.
+            try
+            {
+                if (!VerifyStage10DeathCommitRegistration())
+                {
+                    allOk = false;
+                }
+                if (!VerifyStage10ChatAvatarRegistration())
+                {
+                    allOk = false;
+                }
+                if (!VerifyInventoryUiProjectionRegistration())
+                {
+                    allOk = false;
+                }
+                if (!Stage10WorldBroadcastActivationValid ||
+                    P2PWorldStatusBroadcaster.ActivationState ==
+                        P2PWorldStatusBroadcaster.EWorldBroadcastActivationState.Failed)
+                {
+                    RoleLogger.Error("[Shared]",
+                        "[Stage10] !!! DIAGNOSTIC BUILD INVALID: world-status broadcast activation failed " +
+                        "(deferred subscribe to PlayerLife.onPlayerDied failed)");
+                    allOk = false;
+                }
+                else
+                {
+                    RoleLogger.Info("[Shared]",
+                        "[Stage10] OK world-status broadcast activation state=" +
+                        P2PWorldStatusBroadcaster.ActivationState);
+                }
+            }
+            catch (System.Exception ex)
+            {
+                RoleLogger.Error("[Shared]", "[Stage10] activation aggregate failed: " + ex.Message);
                 allOk = false;
             }
 

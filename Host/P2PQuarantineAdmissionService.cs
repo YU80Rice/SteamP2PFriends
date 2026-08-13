@@ -17,6 +17,21 @@ namespace SteamP2PFriends.Host
         Active = 3
     }
 
+    /// <summary>
+    /// Stage 10 指令 A: explicit result of a connected-player promotion. Produced inside
+    /// quarantine by the real transaction outcome; callers must not guess state via IsKnown.
+    /// Only AlreadyApproved and Activated may trigger the corresponding join broadcast; both
+    /// Rejected* results must never broadcast "joined" before the kick.
+    /// </summary>
+    internal enum QuarantinePromotionResult : byte
+    {
+        Ignored,
+        AlreadyApproved,
+        Activated,
+        RejectedMissingReservation,
+        RejectedSignalFailure
+    }
+
     internal readonly struct QuarantineEntry
     {
         internal readonly ulong SteamId;
@@ -180,19 +195,25 @@ namespace SteamP2PFriends.Host
             }
         }
 
-        internal static void PromoteConnected(SteamPlayer steamPlayer)
+        /// <summary>
+        /// Stage 10 指令 A: promotes a connected player and returns the explicit transaction
+        /// result. Only AlreadyApproved and Activated may trigger the join broadcast; the two
+        /// Rejected* results must never broadcast "joined" before the kick.
+        /// </summary>
+        internal static QuarantinePromotionResult PromoteConnected(SteamPlayer steamPlayer)
         {
             AssertGameThread();
             if (!IsActiveP2PHost || ReferenceEquals(steamPlayer, null) ||
-                ReferenceEquals(steamPlayer.playerID, null)) return;
+                ReferenceEquals(steamPlayer.playerID, null)) return QuarantinePromotionResult.Ignored;
 
             CSteamID id = steamPlayer.playerID.steamID;
-            if (id == CSteamID.Nil || !id.IsValid() || id == Provider.user) return;
+            if (id == CSteamID.Nil || !id.IsValid() || id == Provider.user)
+                return QuarantinePromotionResult.Ignored;
 
             if (ContainsWhitelist(id))
             {
                 RemoveEntry(id.m_SteamID);
-                return;
+                return QuarantinePromotionResult.AlreadyApproved;
             }
 
             bool promoted = false;
@@ -213,20 +234,21 @@ namespace SteamP2PFriends.Host
                 RoleLogger.Error("[Host]",
                     "[P2P-Quarantine] connected unknown player had no reservation; kicking fail-closed");
                 Kick(id.m_SteamID, "Admission quarantine state missing.");
-                return;
+                return QuarantinePromotionResult.RejectedMissingReservation;
             }
 
             if (!SetSignal(steamPlayer, true))
             {
                 RemoveEntry(id.m_SteamID);
                 Kick(id.m_SteamID, "Unable to initialize approval quarantine.");
-                return;
+                return QuarantinePromotionResult.RejectedSignalFailure;
             }
 
             RoleLogger.Info("[Host]",
                 "[P2P-Quarantine] active steamId=" + id.m_SteamID + " deadline=30s");
             SendTargetedChat(id.m_SteamID,
                 "你正在等待房主审核，最长等待 30 秒。审核前无法行动或交互，但处于无敌状态。");
+            return QuarantinePromotionResult.Activated;
         }
 
         internal static bool PromoteForTest(ulong steamId, object transportToken, float now)
@@ -368,6 +390,18 @@ namespace SteamP2PFriends.Host
                 {
                     SteamPlayer player = FindClient(id);
                     if (player != null) SetSignal(player, false);
+                }
+                // Stage 10 指令 C: write the expected-departure marker + broadcast BEFORE the Kick,
+                // so the subsequent onEnemyDisconnected consumes the marker and does NOT add a
+                // second ordinary "left" message. A broadcaster exception must not block the Kick.
+                try
+                {
+                    P2PWorldStatusBroadcaster.OnApprovalTimeout(new CSteamID(id));
+                }
+                catch (Exception bcEx)
+                {
+                    RoleLogger.Warn("[Host]",
+                        "[WorldBroadcast] timeout broadcast failed (kick continues): " + bcEx.GetType().Name);
                 }
                 Kick(id, "Host approval timed out (30 seconds).");
                 RoleLogger.Info("[Host]", "[P2P-Quarantine] timeout kick steamId=" + id);
