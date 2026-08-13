@@ -1,5 +1,9 @@
 # Changelog
 
+## 项目发展史
+
+从原版 P2P 原型、LaunchP2PHostManager 与独立 U3DS 路线探索，到 SteamUser 身份重构、连续双机失败复盘、审计制度化和 `v0.2.3.60-beta.1` 总回归，完整叙事与证据索引见 [DEVELOPMENT_TIMELINE.md](./DEVELOPMENT_TIMELINE.md)。本文只把归档报告、源代码目录、Git 提交和测试 artifact 能够支持的内容写成事实。
+
 本项目从 `0.2.3.56` 开始在此记录面向用户的发布变更。更早的实验、审计与双机测试历史保留在 `AUDIT_CHECKLIST.md` 与本地 `.audit` 归档中。
 
 ## 0.2.3.60 - 2026-08-13
