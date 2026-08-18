@@ -60,6 +60,7 @@ namespace SteamP2PFriends.Patches
             try
             {
                 ulong remoteSteamId = playerID.steamID.m_SteamID;
+                P2PConnectionJournal.HostAccepted(remoteSteamId);
                 RoleLogger.Info("[Host]",
                     $"{DiagnosticContext.FormatPrefixFor(remoteSteamId, "Provider.accept RETURNED")} " +
                     $"remoteSteamId={remoteSteamId} " +

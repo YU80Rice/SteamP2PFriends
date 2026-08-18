@@ -19,6 +19,24 @@ namespace SteamP2PFriends.WhitelistTests
     /// </summary>
     internal static class HarmonyMetadataTests
     {
+        internal static bool Test_H15_AuthHandshakeJournalTargetsResolve()
+        {
+            MethodInfo verify = AuthHandshakeJournalPatch.GetVerifyTargetMethod();
+            MethodInfo authenticate = AuthHandshakeJournalPatch.GetAuthenticateTargetMethod();
+            MethodInfo sendToServer = AuthHandshakeJournalPatch.GetSendAuthenticateTargetMethod();
+            if (verify == null || authenticate == null || sendToServer == null) return false;
+
+            ParameterInfo[] verifyParameters = verify.GetParameters();
+            ParameterInfo[] authenticateParameters = authenticate.GetParameters();
+            ParameterInfo[] sendParameters = sendToServer.GetParameters();
+            return verifyParameters.Length == 1 &&
+                   authenticateParameters.Length == 2 &&
+                   authenticateParameters[0].ParameterType == typeof(SDG.NetTransport.ITransportConnection) &&
+                   sendParameters.Length == 3 &&
+                   sendParameters[0].ParameterType == typeof(SDG.Unturned.EServerMessage) &&
+                   sendParameters[1].ParameterType == typeof(SDG.NetTransport.ENetReliability);
+        }
+
         // H2 专用 Harmony ID（隔离测试，避免污染生产 HARMONY_ID）
         private const string H2_HARMONY_ID = "com.yu80rice.steamp2pfriends.test.h2";
         private const string H3_HARMONY_ID = "com.yu80rice.steamp2pfriends.test.h3";

@@ -20,7 +20,7 @@ Double-click `SteamP2PFriends-TestArchive.bat` only when an additional CFG-and-h
 
 Use the one-click entry on both roles. `Host` and `Client` evidence must end up under the same `<CaseId>` directory before verification. For a second computer or VM, use a deliberately configured shared `TestLogs/artifacts` directory, or transfer the complete Client role subdirectories without overwriting any existing destination file.
 
-1. On both endpoints, set `[Debug] VerboseDiagnostics=false` and `RouteDiagnostics=false`, then select `START` while Unturned is closed. This records the deployed plugin SHA-256 and immutable CFG copy.
+1. On both endpoints, set `[Debug] VerboseDiagnostics=false` and `RouteDiagnostics=false`, then select `START` while Unturned is closed. This records the deployed plugin SHA-256 and immutable CFG copy. `v0.2.3.62-beta.2` still records its bounded `[P2P-Connection]` events with both options off.
 2. Launch Unturned, then execute exactly one test route for the case.
 3. Exit Unturned completely on each endpoint and select `FINISH`. No game log is copied or parsed.
 4. Merge both roles and select `VERIFY` once. `evidence-summary.json` records the plugin and CFG identity verdict and is never overwritten; a failed Case remains immutable and is never overwritten.
@@ -31,7 +31,7 @@ These helpers are optional archive aids. They do not prove P2P gameplay, replace
 
 ## beta.2 example
 
-Use a fresh Case ID for each route and direction. The current release is `v0.2.3.61-beta.2` with SHA-256 `3031C999138E850AED61636032B1580FAFBC6DC35B2F1F3D673262C43C67FC89`.
+Use a fresh Case ID for each route and direction. The current release is `v0.2.3.62-beta.2`; its SHA-256 is recorded in the matching GitHub Release and audit report after the Release build.
 
 The separate `Initialize-TestCase.ps1` -> `Archive-TestLogs.ps1` -> `Verify-TestCase.ps1` chain remains available for optional raw Host/Client log archiving. `Archive-TestLogs.ps1` rejects execution while Unturned is running. Its pre/post snapshots are independent diagnostic material only and do not affect `evidence-summary.json` or the CFG-and-hash verdict.
 

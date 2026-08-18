@@ -44,6 +44,7 @@ namespace SteamP2PFriends.Patches
         {
             try
             {
+                P2PConnectionJournal.LocalDisconnectRequested(reason);
                 // 反射读取 Provider._clientTransport 或 serverTransport
                 // 但 vanilla Provider._clientTransport 是 internal，这里只通过 SNS API 直接抓取
                 // 由于 vanilla RequestDisconnect 多由客机端触发，我们记录当前已知的所有 handle 状态

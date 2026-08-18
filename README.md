@@ -3,7 +3,7 @@
 > 为 Unturned 提供无 U3DS 的便捷 listen-host 联机，同时支持 SteamID P2P 和 IPv4 直连。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
-[![Version](https://img.shields.io/badge/version-0.2.3.61--beta.2-blue.svg)](https://github.com/YU80Rice/SteamP2PFriends/releases)
+[![Version](https://img.shields.io/badge/version-0.2.3.62--beta.2-blue.svg)](https://github.com/YU80Rice/SteamP2PFriends/releases)
 [![Status](https://img.shields.io/badge/status-Beta%20Prerelease-orange.svg)](https://github.com/YU80Rice/SteamP2PFriends/releases)
 
 ## 项目简介
@@ -63,6 +63,10 @@ Unturned/
 
 插件只接管有效的 Steam 个人账户 ID；U3DS Server Code 仍交给原版处理。
 
+### 连接日志
+
+`v0.2.3.62-beta.2` 默认输出低频 `[P2P-Connection]` 事件。发生失败时，房主和客机日志会记录连接调用、客户端状态变化、`Verify`、`Authenticate`、接受/拒绝和断开阶段；不记录认证票据。`VerboseDiagnostics` 与 `RouteDiagnostics` 仍默认关闭，只用于额外诊断，不是该连接事件日志的前提。
+
 ### 客机通过 IPv4 加入
 
 1. 打开“开始游戏 → 直连”。
@@ -94,14 +98,14 @@ Windows 防火墙必须允许 Unturned 在相应网络上使用 UDP `27016`。
 
 | 项目 | 值 |
 |---|---|
-| BepInPlugin | `0.2.3.61` |
-| AssemblyVersion | `0.2.3.61` |
-| AssemblyFileVersion | `0.2.3.61` |
-| 当前构建 SHA-256 | `3031C999138E850AED61636032B1580FAFBC6DC35B2F1F3D673262C43C67FC89` |
-| 静态状态 | 当前 Unturned/BepInEx ABI 零警告构建；自动化测试 `268/268 PASS` |
-| 当前手动测试归档 | `Beta2-P2P-AHost-20260818-1300`：`AllOK=true` |
-| 发布标识 | `v0.2.3.61-beta.2` |
-| 发布状态 | Beta 2 公开预发布版 |
+| BepInPlugin | `0.2.3.62` |
+| AssemblyVersion | `0.2.3.62` |
+| AssemblyFileVersion | `0.2.3.62` |
+| 当前构建 SHA-256 | `0198DBC963ACF0DC769136E737D265D38D0CF2665C53A0A652DA20F949681777` |
+| 静态状态 | 当前 Unturned/BepInEx ABI 零警告构建；自动化测试 `269/269 PASS` |
+| 当前手动测试归档 | `Beta2-P2P-AHost-20260818-1300`：`AllOK=true`，仅覆盖 `0.2.3.61` |
+| 发布标识 | `v0.2.3.62-beta.2` |
+| 发布状态 | Beta 2 连接取证构建，待新 DLL 双机运行时验证 |
 
 ## 已验证边界与免责声明
 

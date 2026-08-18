@@ -34,6 +34,7 @@ namespace SteamP2PFriends.Patches
         {
             try
             {
+                P2PConnectionJournal.ClientAcceptedReceived(Provider.server);
                 RoleLogger.Info("[Client]",
                     $"{DiagnosticContext.FormatPrefix("ClientMessageHandler_Accepted.ReadMessage EXIT")} " +
                     $"server={Provider.server.m_SteamID} isClient={Provider.isClient} isConnected={Provider.isConnected}");

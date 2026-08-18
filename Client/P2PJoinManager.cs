@@ -133,7 +133,7 @@ namespace SteamP2PFriends.Client
             if (Provider.isConnected)
             {
                 RoleLogger.Info(DynamicRole(), "检测到残留会话，进入 Disconnecting 状态。");
-                _state = EJoinState.Disconnecting;
+                SetState(EJoinState.Disconnecting, "residual-session");
                 _disconnectStartTime = Time.realtimeSinceStartup;
                 _lastStage = "Disconnecting(residual)";
                 NativeLoadingGateDumper.StopPostAcceptedTracking();
@@ -162,7 +162,7 @@ namespace SteamP2PFriends.Client
             _targetSteamId = steamIdRaw;
             _attempt = 0;
             _lastFailureInfo = ESteamConnectionFailureInfo.NONE;
-            _state = EJoinState.Connecting;
+            SetState(EJoinState.Connecting, "join-request");
             _connectStartTime = Time.realtimeSinceStartup;
             _lastStage = "Connecting";
             _postAcceptedWatchdogFired = false;
@@ -183,7 +183,7 @@ namespace SteamP2PFriends.Client
 
             RoleLogger.Info(DynamicRole(),
                 $"[P0-3] 请求断开连接，进入 Disconnecting 状态（from {_state}）。");
-            _state = EJoinState.Disconnecting;
+            SetState(EJoinState.Disconnecting, "manual-disconnect");
             _disconnectStartTime = Time.realtimeSinceStartup;
             _lastStage = "Disconnecting(manual)";
 
@@ -233,7 +233,7 @@ namespace SteamP2PFriends.Client
         {
             if (now - _connectStartTime > TimeoutSeconds)
             {
-                _state = EJoinState.Timeout;
+                SetState(EJoinState.Timeout, "connect-watchdog");
                 RoleLogger.Error(DynamicRole(),
                     $"!!! 连接超时 !!! target={_targetSteamId} elapsed={now - _connectStartTime:F1}s " +
                     $"(lastFailure={_lastFailureInfo}) lastStage={_lastStage}");
@@ -251,7 +251,7 @@ namespace SteamP2PFriends.Client
             Player localPlayer = Player.LocalPlayer;
             if (!ReferenceEquals(localPlayer, null))
             {
-                _state = EJoinState.LocalPlayerCreated;
+                SetState(EJoinState.LocalPlayerCreated, "local-player-created");
                 _lastStage = "LocalPlayerCreated";
                 RoleLogger.Info(DynamicRole(),
                     $"[P1-G] 状态推进: ServerAccepted -> LocalPlayerCreated " +
@@ -272,7 +272,7 @@ namespace SteamP2PFriends.Client
                     $"isConnected={Provider.isConnected} isServer={Provider.isServer} " +
                     $"connectionFailureInfo={Provider.connectionFailureInfo}");
                 NativeLoadingGateDumper.Dump("HandleServerAcceptedTick(watchdog-fired)");
-                _state = EJoinState.Timeout;
+                SetState(EJoinState.Timeout, "server-accepted-watchdog");
                 return;
             }
 
@@ -306,7 +306,7 @@ namespace SteamP2PFriends.Client
 
             if (componentsReady && loadingFlagsCleared)
             {
-                _state = EJoinState.Connected;
+                SetState(EJoinState.Connected, "operational");
                 _lastStage = "Connected(Operational)";
                 _postAcceptedWatchdogFired = true; // 停止 watchdog
                 RoleLogger.Info(DynamicRole(),
@@ -345,7 +345,7 @@ namespace SteamP2PFriends.Client
                     $"bitmask=0x{(localPlayerExists ? GameplayReadyTracker.GetMask(localPlayer) : 0):X2} " +
                     $"localComponentsInit={_localComponentsInitializedSignaled}");
                 NativeLoadingGateDumper.Dump("HandleLocalPlayerCreatedTick(watchdog-fired)");
-                _state = EJoinState.Timeout;
+                SetState(EJoinState.Timeout, "local-player-watchdog");
                 return;
             }
 
@@ -424,14 +424,14 @@ namespace SteamP2PFriends.Client
 
                 if (!isConnected && !hasLocalPlayer)
                 {
-                    _state = EJoinState.TeardownComplete;
+                    SetState(EJoinState.TeardownComplete, "disconnect-timeout-state-clean");
                     _lastStage = "TeardownComplete(late)";
                     RoleLogger.Info(DynamicRole(),
                         $"[P0-9] Disconnecting 超时但静态状态已清空，推进 TeardownComplete。");
                 }
                 else
                 {
-                    _state = EJoinState.TeardownFailed;
+                    SetState(EJoinState.TeardownFailed, "disconnect-timeout-state-not-clean");
                     _lastStage = "TeardownFailed(timeout, state not clean)";
                     RoleLogger.Error(DynamicRole(),
                         $"!!! Disconnecting 超时且静态状态未清空，标记 TeardownFailed 禁止重连 !!! " +
@@ -448,7 +448,7 @@ namespace SteamP2PFriends.Client
 
             if (!Provider.isConnected && Player.LocalPlayer == null)
             {
-                _state = EJoinState.TeardownComplete;
+                SetState(EJoinState.TeardownComplete, "disconnect-complete");
                 _lastStage = "TeardownComplete";
                 RoleLogger.Info(DynamicRole(),
                     "[P0-3] 状态推进: Disconnecting -> TeardownComplete " +
@@ -530,7 +530,9 @@ namespace SteamP2PFriends.Client
                 RoleLogger.Info(DynamicRole(),
                     $"[Diag] ServerConnectParameters constructed: hostSteamId={hostSteamId.m_SteamID} " +
                     $"passwordEmpty={string.IsNullOrEmpty(string.Empty)}");
+                P2PConnectionJournal.ClientConnectCalling(_targetSteamId, _attempt + 1);
                 Provider.connect(parameters, null, null);
+                P2PConnectionJournal.ClientConnectCallReturned(_targetSteamId);
                 _connectStartTime = Time.realtimeSinceStartup;
                 _lastStage = "Provider.connect called";
                 RoleLogger.Info(DynamicRole(),
@@ -540,7 +542,7 @@ namespace SteamP2PFriends.Client
             catch (System.Exception ex)
             {
                 RoleLogger.Error(DynamicRole(), $"DoConnect 失败: {ex}");
-                _state = EJoinState.Failed;
+                SetState(EJoinState.Failed, "provider-connect-threw");
                 return false;
             }
         }
@@ -556,7 +558,7 @@ namespace SteamP2PFriends.Client
 
             if (_state == EJoinState.Connecting)
             {
-                _state = EJoinState.ServerAccepted;
+                SetState(EJoinState.ServerAccepted, "on-client-connected");
                 _serverAcceptedTime = Time.realtimeSinceStartup;
                 _lastStage = "ServerAccepted(via onClientConnected)";
                 RoleLogger.Info(DynamicRole(),
@@ -593,12 +595,12 @@ namespace SteamP2PFriends.Client
 
             if (!Provider.isConnected && Player.LocalPlayer == null)
                 {
-                    _state = EJoinState.TeardownComplete;
+                    SetState(EJoinState.TeardownComplete, "disconnect-none-state-clean");
                     _lastStage = "TeardownComplete(disconnect no error, state clean)";
                 }
                 else
                 {
-                    _state = EJoinState.Disconnecting;
+                    SetState(EJoinState.Disconnecting, "disconnect-none-wait-cleanup");
                     _disconnectStartTime = Time.realtimeSinceStartup;
                     _lastStage = "Disconnecting(none disconnect, state not clean)";
                     RoleLogger.Info(DynamicRole(),
@@ -607,7 +609,7 @@ namespace SteamP2PFriends.Client
                 return;
             }
 
-            _state = EJoinState.Failed;
+            SetState(EJoinState.Failed, "client-disconnected-with-failure");
             RoleLogger.Error(DynamicRole(),
                 $"!!! 连接失败 !!! target={_targetSteamId} state={_state} info={_lastFailureInfo}");
 
@@ -717,7 +719,7 @@ namespace SteamP2PFriends.Client
                 return;
             }
 
-            _state = EJoinState.Idle;
+            SetState(EJoinState.Idle, "reset");
             _targetSteamId = 0;
             _attempt = 0;
             _lastFailureInfo = ESteamConnectionFailureInfo.NONE;
@@ -727,6 +729,13 @@ namespace SteamP2PFriends.Client
             _postAcceptedWatchdogFired = false;
             _acceptedAndLocalComponentsTime = 0f;
             NativeLoadingGateDumper.StopPostAcceptedTracking();
+        }
+
+        private static void SetState(EJoinState next, string cause)
+        {
+            EJoinState previous = _state;
+            _state = next;
+            P2PConnectionJournal.ClientStateChanged(_targetSteamId, previous, next, cause, _lastFailureInfo);
         }
     }
 }

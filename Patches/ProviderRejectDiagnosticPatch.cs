@@ -98,6 +98,7 @@ namespace SteamP2PFriends.Patches
         {
             try
             {
+                P2PConnectionJournal.HostRejected(steamID.m_SteamID, rejection, "steam-id");
                 RoleLogger.Warn("[Host]",
                     $"{DiagnosticContext.FormatPrefixFor(steamID.m_SteamID, "Provider.reject ENTER")} " +
                     $"steamId={steamID.m_SteamID} rejection={rejection}({(int)rejection})");
@@ -109,6 +110,7 @@ namespace SteamP2PFriends.Patches
         {
             try
             {
+                P2PConnectionJournal.HostRejected(steamID.m_SteamID, rejection, "steam-id-with-explanation");
                 RoleLogger.Warn("[Host]",
                     $"{DiagnosticContext.FormatPrefixFor(steamID.m_SteamID, "Provider.reject ENTER")} " +
                     $"steamId={steamID.m_SteamID} rejection={rejection}({(int)rejection}) explanation=\"{explanation}\"");
@@ -120,6 +122,7 @@ namespace SteamP2PFriends.Patches
         {
             try
             {
+                P2PConnectionJournal.HostRejected(transportConnection, rejection, "transport");
                 string transportType = transportConnection?.GetType().Name ?? "null";
                 RoleLogger.Warn("[Host]",
                     $"{DiagnosticContext.FormatPrefix("Provider.reject ENTER")} " +
@@ -132,6 +135,7 @@ namespace SteamP2PFriends.Patches
         {
             try
             {
+                P2PConnectionJournal.HostRejected(transportConnection, rejection, "transport-with-explanation");
                 string transportType = transportConnection?.GetType().Name ?? "null";
                 RoleLogger.Warn("[Host]",
                     $"{DiagnosticContext.FormatPrefix("Provider.reject ENTER")} " +

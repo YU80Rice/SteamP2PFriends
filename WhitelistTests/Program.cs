@@ -143,6 +143,7 @@ namespace SteamP2PFriends.WhitelistTests
             RunTest("H12. Compat_ObserverPatch_DoesNotBlock", HarmonyCompatibilityAuditTests.Test_ObserverPatch_IsRecordedWithoutBlocking, ref total, ref passed, ref failed);
             RunTest("H13. Compat_ForeignTranspiler_Blocks", HarmonyCompatibilityAuditTests.Test_ForeignTranspiler_OnOwnTranspiledTarget_Blocks, ref total, ref passed, ref failed);
             RunTest("H14. Compat_P2PTransportTargets_RemainExclusive", HarmonyCompatibilityAuditTests.Test_P2PTransportTargets_RemainExclusive, ref total, ref passed, ref failed);
+            RunTest("H15. AuthHandshakeJournalTargetsResolve", HarmonyMetadataTests.Test_H15_AuthHandshakeJournalTargetsResolve, ref total, ref passed, ref failed);
             RunTest("LOG1. LegacyDiagnosticMarkersAreClassified", LoggingPolicyTests.Test_LegacyDiagnosticMarkersAreClassified, ref total, ref passed, ref failed);
             RunTest("LOG2. VerboseToggleIsAtomicAndDefaultsOff", LoggingPolicyTests.Test_VerboseToggleIsAtomicAndDefaultsOff, ref total, ref passed, ref failed);
             RunTest("LOG3. LegacyLabelsAreRemovedAtOutputBoundary", LoggingPolicyTests.Test_LegacyLabelsAreRemovedAtOutputBoundary, ref total, ref passed, ref failed);

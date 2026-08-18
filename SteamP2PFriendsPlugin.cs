@@ -21,7 +21,7 @@ namespace SteamP2PFriends
     /// 该插件仅支持 SteamUser P2P listen-host：房主客户端同时承担原版服务端和本地客户端。
     /// 不启动 U3DS，不修改全局 Dedicated Server 判定，也不伪造原版加载完成状态。
     /// </summary>
-    [BepInPlugin("com.yu80rice.steamp2pfriends", "SteamP2PFriends", "0.2.3.61")]
+    [BepInPlugin("com.yu80rice.steamp2pfriends", "SteamP2PFriends", "0.2.3.62")]
     [BepInDependency("com.yu80rice.launchinventorytidy", BepInDependency.DependencyFlags.SoftDependency)]
     public class SteamP2PFriendsPlugin : BaseUnityPlugin
     {
@@ -113,7 +113,7 @@ namespace SteamP2PFriends
             }
 
             RoleLogger.Info("[Shared]",
-                $"[Startup] version=0.2.3.61 p2pEnabled={EnableP2PCoop.Value} " +
+                $"[Startup] version=0.2.3.62 p2pEnabled={EnableP2PCoop.Value} " +
                 $"verboseDiagnostics={VerboseLog.Value} routeDiagnostics={RouteDiagnostics.Value} " +
                 $"worldStatus={P2PWorldStatusBroadcaster.ActivationState}");
 
@@ -3420,6 +3420,14 @@ namespace SteamP2PFriends
             catch (System.Exception ex)
             {
                 RoleLogger.Error("[Shared]", $"NetMessagesSendDiagnosticPatch.RegisterManual 失败: {ex}");
+            }
+            try
+            {
+                Patches.AuthHandshakeJournalPatch.RegisterManual(_harmony);
+            }
+            catch (System.Exception ex)
+            {
+                RoleLogger.Error("[Shared]", $"[P2P-Connection] auth handshake journal registration threw: {ex.GetType().Name}");
             }
             try
             {

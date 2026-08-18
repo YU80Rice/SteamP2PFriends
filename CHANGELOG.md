@@ -6,6 +6,20 @@
 
 本项目从 `0.2.3.56` 开始在此记录面向用户的发布变更。更早的实验、审计与双机测试历史保留在 `AUDIT_CHECKLIST.md` 与本地 `.audit` 归档中。
 
+## v0.2.3.62-beta.2 - 2026-08-18
+
+> Beta 2 低频连接取证构建：不修改 SteamID P2P listen-host 的连接、认证、准入、白名单或重传行为，只补齐可归档的连接事件证据。
+
+### Changed
+
+- 插件、Assembly 与文件版本更新为 `0.2.3.62`；发布标识为 `v0.2.3.62-beta.2`。
+- 默认输出低频 `[P2P-Connection]` 事件，不受 `VerboseDiagnostics=false` 与 `RouteDiagnostics=false` 影响：客机连接调用和状态迁移、收到 `Verify`、`Authenticate` 发送调用、主机收到/处理 `Authenticate`、主机接受或拒绝、客机收到 `Accepted`、本地断开请求。
+- 认证日志只记录事件、SteamID、传输类型、状态与异常类型；不读取或输出认证票据内容，不创建重传或修改任何原版返回值/异常。
+
+### 验证边界
+
+- 本构建已完成静态目标解析和自动化回归；旧 `0.2.3.61` 双机归档不能替代新 DLL 的双机运行时验证。
+
 ## v0.2.3.61-beta.2 - 2026-08-18
 
 > ✅ **Beta 2 公开预发布版**：面向 SteamUser P2P listen-host 的本地多人联机。双端手动测试归档 `Beta2-P2P-AHost-20260818-1300` 的 `evidence-summary.json` 为 `AllOK=true`。

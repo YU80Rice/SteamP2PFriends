@@ -14,7 +14,8 @@ namespace SteamP2PFriends.WhitelistTests
                    IsDiagnostic("[ManualPatch] registered") &&
                    IsDiagnostic("v0.2.3.17 historical repair detail") &&
                    !IsDiagnostic("[P2P] host session started") &&
-                   !IsDiagnostic("[Compat] report written");
+                   !IsDiagnostic("[Compat] report written") &&
+                   !IsDiagnostic("[P2P-Connection] event=CLIENT_AUTHENTICATE_SEND_CALLING");
         }
 
         internal static bool Test_VerboseToggleIsAtomicAndDefaultsOff()
