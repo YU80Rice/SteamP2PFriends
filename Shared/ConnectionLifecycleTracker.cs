@@ -6,9 +6,7 @@ using UnityEngine;
 namespace SteamP2PFriends.Shared
 {
     /// <summary>
-    /// v0.2.3.5 P0-3：FindingRoute 生命周期快照 tracker。
     ///
-    /// 设计目标（审计第五次审计 P0-3）：
     ///   - 对每个 handle 建立只读跟踪。
     ///   - 进入 Connecting/FindingRoute 后按 0s/1s/5s/10s/20s/25s 节拍输出
     ///     GetConnectionInfo、RealTimeStatus 和 relay/auth readiness。
@@ -200,7 +198,6 @@ namespace SteamP2PFriends.Shared
         }
 
         /// <summary>
-        /// v0.2.3.5 P0-2 辅助：在 Provider.RequestDisconnect Prefix 等关键时机
         /// 强制对当前所有活跃 handle 输出一次 live snapshot。
         /// 用于在 vanilla teardown 前捕获 SNS 连接状态。
         /// </summary>

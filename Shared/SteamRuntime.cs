@@ -6,7 +6,6 @@ using SteamP2PFriends.Shared;
 namespace SteamP2PFriends.Shared
 {
     /// <summary>
-    /// Steamworks.NET 运行时反射绑定（迁移自 LaunchP2PHostManager v2.11.0 SteamRuntime.cs）。
     ///
     /// Libs/ 目录中没有 Steamworks.NET DLL（它由游戏运行时由 BepInEx 加载链中
     /// Assembly-CSharp-firstpass.dll 或独立的 Steamworks.dll / steam_api64.dll 提供）。

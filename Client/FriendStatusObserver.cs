@@ -5,14 +5,11 @@ using System;
 namespace SteamP2PFriends.Client
 {
     /// <summary>
-    /// v0.2.3.5 P1-1：好友/在线状态观察项。
     ///
-    /// 设计目标（审计第五次审计 P1-1）：
     ///   - 记录 relationship、persona state、双方 Steam 登录状态。
     ///   - 不阻止连接、不自动修改关系。
     ///   - 仅在客机端 TryConnectToHost 前调用一次，记录诊断信息。
     ///
-    /// 严格禁止（审计报告 4.5）：
     ///   - 因 HasFriend=false 阻止 ConnectP2P
     ///   - 自动添加好友
     ///   - 修改任何好友关系

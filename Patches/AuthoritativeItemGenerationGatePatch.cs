@@ -207,7 +207,6 @@ namespace SteamP2PFriends.Patches
             try
             {
                 ThreadUtil.assertIsGameThread();
-                // Do not use ShouldProcessClientHostListen here: initial P0-B-6 generation runs
                 // during onLevelLoaded before Level.isLoaded / Provider.isConnected are guaranteed.
                 // IsP2PHostMode is established before Provider.host and remains the session identity.
                 if (!HostManager.IsP2PHostMode || !Provider.isServer)

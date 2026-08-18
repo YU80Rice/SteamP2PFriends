@@ -9,7 +9,6 @@ using System.Text;
 namespace SteamP2PFriends.Host
 {
     /// <summary>
-    /// v0.2.3.17 P0-E：vanilla listen server effective hash 计算限制修复。
     ///
     /// 背景：vanilla MasterBundleValidation.initialize 开头要求 Dedicator.IsDedicatedServer=true，
     /// 否则抛 NotSupportedException。listen server 模式下 serverHashes=null，服务端 serverHash=asset.hash

@@ -8,11 +8,9 @@ using System.Reflection.Emit;
 namespace SteamP2PFriends.Patches
 {
     /// <summary>
-    /// v0.2.3.33 P0-C-2 动物周期性状态广播（Codex 第二十一次双机测试外部审计 §6.2 裁决事项 3 授权实施）：
     ///
     /// 根因（U3-SDK AnimalManager.cs:999-1067 Update）：
     ///   L1001 if (!Provider.isServer || !Level.isLoaded) return;
-    ///   L1019 if (Dedicator.IsDedicatedServer)  <-- time-slice 门控（Codex 禁止项：不得替换）
     ///     L1021-1034 time-slice 逻辑（tickIndex 管理，每次 tick 25 只）
     ///   L1035 else  <-- listen host 走此分支（全量 tick，保留）
     ///     L1037-1038 start=0, end=tickingAnimals.Count
@@ -28,7 +26,6 @@ namespace SteamP2PFriends.Patches
     ///   - 主机日志：wouldSendAnimalStates=False（全程）
     ///   - 客机日志：0 次 ReceiveAnimalStates
     ///
-    /// 修复方案（Codex §6.2 裁决事项 3 授权实施）：
     ///   Transpiler 替换 AnimalManager.Update 中第 2 处 Dedicator.IsDedicatedServer 调用（L1057）
     ///   为 ListenRegionSyncEligibility.IsDedicatedOrP2PHost()。
     ///
@@ -42,7 +39,6 @@ namespace SteamP2PFriends.Patches
     ///   sendAnimalStates 内部遍历 Provider.clients，对每个 client 发送 SendAnimalStates.Invoke，
     ///   目标由 Provider.clients 决定（已排除 loopback 玩家），listen host 下只会发往远端客机。
     ///
-    /// 动物 isUpdated 标记链路（Codex §3.4 验证）：
     ///   - AnimalManager.cs:1035-1039 else 分支：listen host 下 start=0, end=tickingAnimals.Count（全量 tick）
     ///   - AnimalManager.cs:1052 animal.tick() 调用
     ///   - Animal.cs:959-961 animal.tick() 内部设置 isUpdated=true
@@ -59,11 +55,7 @@ namespace SteamP2PFriends.Patches
     ///   - 不替换 L1019（time-slice 门控保留，listen host 走 else 分支全量 tick）
     ///   - 不修改 sendAnimalStates 实现
     ///   - 不干预 animal.tick() 的 isUpdated 标记逻辑
-    ///   - 不替换 AnimalManager.tickAnimal L1019（Codex 禁止项）
-    ///   - 不替换 AnimalManager.addAnimal L523（Codex 禁止项）
     ///
-    /// 禁止项（Codex §6.2 裁决事项 5）：
-    ///   - 不夹带 P0-E / ItemManager.dropItem 修改
     ///   - 不替换 VehicleManager.Update L2853
     ///   - 不替换 AnimalManager.tickAnimal L1019
     ///   - 不替换 AnimalManager.addAnimal L523
@@ -281,7 +273,6 @@ namespace SteamP2PFriends.Patches
         }
 
         /// <summary>
-        /// v0.2.3.33 P0-C-2 动物 Transpiler 主实现。
         /// 替换 vanilla AnimalManager.Update 中第 2 处 Dedicator.get_IsDedicatedServer() 调用（L1057）
         /// 为 ListenRegionSyncEligibility.IsDedicatedOrP2PHost()。
         ///

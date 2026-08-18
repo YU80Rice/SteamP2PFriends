@@ -8,10 +8,8 @@ using UnityEngine;
 namespace SteamP2PFriends.Client
 {
     /// <summary>
-    /// v0.2.3.19 D-Vis-6 客机端扩展（ClientRemotePlayerRenderProbe）。
     ///
     /// 背景：
-    ///   v0.2.3.18 RemotePlayerRenderProbe 在 Provider.isServer=true 时运行（房主端），
     ///   客机端 Provider.isServer=false，直接 return，所以 D-Vis-6 客机端 0 次是预期行为。
     ///   审计建议新增客机端专用 RenderProbe，让客机端也能采样房主模型渲染状态。
     ///
@@ -57,6 +55,12 @@ namespace SteamP2PFriends.Client
 
         public static void Initialize()
         {
+            if (!PluginLogPolicy.IsVerboseDiagnosticsEnabled)
+            {
+                _initialized = false;
+                return;
+            }
+
             _initialized = true;
             CacheReflection();
             RoleLogger.Info("[Shared]",
@@ -92,7 +96,7 @@ namespace SteamP2PFriends.Client
         /// </summary>
         public static void Tick()
         {
-            if (!_initialized) return;
+            if (!PluginLogPolicy.IsVerboseDiagnosticsEnabled || !_initialized) return;
             // 关键守卫：仅客机端运行（Provider.isServer=false）
             if (Provider.isServer) return;
             if (!Level.isLoaded) return;
@@ -261,7 +265,6 @@ namespace SteamP2PFriends.Client
                     }
                 }
 
-                // isHiddenWaitingForClothing（v0.2.3.19 新增，关联 D-Vis-10）
                 string isHiddenStr = "n/a";
                 string thirdRendererState = "n/a";
                 try

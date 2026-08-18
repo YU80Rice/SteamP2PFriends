@@ -14,12 +14,7 @@ namespace SteamP2PFriends.Host
     ///   - SteamNetConnectionStatusChangedCallback_t 永不派发 -> 客机连接事件收不到
     ///
     /// 演进历史（LaunchP2PHostManager）：
-    ///   v1.7 60-120Hz -> IPC 死锁
-    ///   v1.9 禁用 -> LogOn 超时离线
-    ///   v2.0 自动停止 -> 回调饥饿
-    ///   v2.5 限频 10Hz 永不关闭 = 既保证派发又避免死锁
     ///
-    /// v0.2 重构：从 MonoBehaviour 改为 static class + Tick()，避免 BepInEx 环境
     /// AddComponent 创建的 MonoBehaviour Update 不被 Unity 调用的陷阱。
     /// </summary>
     public static class SteamGameServerCallbacksWatcher

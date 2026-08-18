@@ -8,7 +8,6 @@ using System.Reflection;
 namespace SteamP2PFriends.Patches
 {
     /// <summary>
-    /// v0.2.3 P0-D D-5：NetMessages.SendMessageToClient(s) Prefix+Finalizer 诊断 patch。
     ///
     /// 审计员要求：
     ///   - 记录消息类型（重点 PlayerConnected/Accepted/PlayerDisconnected）、目标 transport 类型、是否抛异常。
@@ -74,7 +73,6 @@ namespace SteamP2PFriends.Patches
 
         /// <summary>
         /// Prefix for SendMessageToClients(EClientMessage, ENetReliability, List&lt;ITransportConnection&gt;, ClientWriteHandler)
-        /// v0.2.3.2 P0-5 修复：记录完整目标 transport 类型列表（原仅 firstTransport）。
         /// </summary>
         public static void SendMessageToClients_List_Prefix(
             EClientMessage index, ENetReliability reliability,
@@ -106,7 +104,6 @@ namespace SteamP2PFriends.Patches
 
         /// <summary>
         /// Finalizer for SendMessageToClients(List). void 签名，不吞异常。
-        /// v0.2.3.2 P0-5 修复：补齐 List Finalizer（原仅 Prefix）。
         /// </summary>
         public static void SendMessageToClients_List_Finalizer(
             EClientMessage index,

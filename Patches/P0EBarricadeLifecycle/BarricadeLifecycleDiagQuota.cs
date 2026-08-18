@@ -4,10 +4,8 @@ using System.Threading;
 namespace SteamP2PFriends.Patches.P0EBarricadeLifecycle
 {
     /// <summary>
-    /// v0.2.3.39 5B-1B v2.5（Codex 第五十九次审计 🟢 放行编码）：
     /// Barricade 生命周期诊断日志的受限配额工具。
     ///
-    /// 设计依据：.audit/v0.2.3.39-stage5B-1B-v2.5-design-20260727/barricade-fix-design-v2.5-20260727.md §12.2
     ///
     /// 职责（严格）：
     ///   - 提供 Interlocked 计数 + 上限判定

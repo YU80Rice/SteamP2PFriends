@@ -6,9 +6,7 @@ using Steamworks;
 namespace SteamP2PFriends.Patches
 {
     /// <summary>
-    /// v0.2.3.1 P0-D D-8 扩展：Provider.reject + kick + refuseGarbageConnection 诊断 patch。
     ///
-    /// v0.2.3.1 P0-5 修复（审计要求补齐）：
     ///   - reject(CSteamID, ESteamRejection) 和 reject(CSteamID, ESteamRejection, string)
     ///   - reject(ITransportConnection, ESteamRejection) 和 reject(ITransportConnection, ESteamRejection, string)
     ///   - kick(CSteamID, string)

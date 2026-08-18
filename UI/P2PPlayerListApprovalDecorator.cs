@@ -11,7 +11,6 @@ using UnityEngine;
 namespace SteamP2PFriends.UI
 {
     /// <summary>
-    /// Stage 7-6 decorates the vanilla Players-binding list (default key P). Vanilla SleekPlayer remains untouched:
     /// the returned row is wrapped, narrowed by 70px, and an approval/revoke button occupies the far right.
     /// </summary>
     internal static class P2PPlayerListApprovalDecorator

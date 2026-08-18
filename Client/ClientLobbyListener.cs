@@ -5,7 +5,6 @@ using Steamworks;
 namespace SteamP2PFriends.Client
 {
     /// <summary>
-    /// 客机 LobbyGameCreated_t 回调监听器（v0.2 新增）。
     ///
     /// 监听 Steam lobby 自动加入信号：当房主调 SetLobbyGameServer(lobby, 0, 0, hostSteamId) 后，
     /// 所有在 lobby 中的客机收到 LobbyGameCreated_t 回调，本监听器自动触发 P2PJoinManager.TryConnectFromLobby。

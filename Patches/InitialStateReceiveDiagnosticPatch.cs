@@ -8,18 +8,14 @@ using System.Reflection;
 namespace SteamP2PFriends.Patches
 {
     /// <summary>
-    /// v0.2.3.4 P0-1/P0-2/P0-3 修复（Codex 第五次审计外部审计报告）：
     ///
-    /// P0-1：移除三组实例 hook 的非法 `__ownerInfo` 参数。Harmony 仅识别 `__state` 作为
     ///       Prefix/Postfix/Finalizer 之间的状态通道；`__ownerInfo` 既不是 Harmony 特殊参数，
     ///       也不是 vanilla 原方法参数，运行时会抛 "IL Compile Error: Parameter __ownerInfo
     ///       does not contain a valid index"。改为在每个阶段通过 `__instance` 重新计算 owner
     ///       信息。
     ///
-    /// P0-2：每个 RegisterXxx 改为返回 bool，独立 try/catch。任一 hook 登记失败不得阻止
     ///       后续 hook 尝试。
     ///
-    /// P0-3：新增 AllRegistrationsSucceeded 静态属性，仅在 7 次 harmony.Patch 均无异常返回
     ///       后才为 true。VerifyCriticalPatches 必须同时检查此属性，不能仅依赖 Harmony
     ///       元数据数量与 owner。
     ///
@@ -35,18 +31,15 @@ namespace SteamP2PFriends.Patches
     public static class InitialStateReceiveDiagnosticPatch
     {
         /// <summary>
-        /// P0-3：七次 harmony.Patch 均无异常返回后置 true。
         /// 任一 RegisterXxx 抛异常或反射失败置 false，且 DiagnosticBuildValid=false。
         /// </summary>
         public static bool AllRegistrationsSucceeded { get; private set; }
 
         /// <summary>
-        /// P0-2：返回 7 个 hook 的登记结果摘要（用于启动日志与阻断门）。
         /// </summary>
         public static string RegistrationSummary { get; private set; } = "尚未登记";
 
         /// <summary>
-        /// P0-2：每个 hook 独立 try/catch，任一失败不影响其他。
         /// 返回 true 仅当 7 个 hook 全部登记成功。
         /// </summary>
         public static bool RegisterManual(Harmony harmony)
@@ -229,7 +222,6 @@ namespace SteamP2PFriends.Patches
         }
 
         // ---------- 5. PlayerInventory.ReceiveInventory ----------
-        // P0-1：移除非法 __ownerInfo 参数，Postfix/Finalizer 改为通过 __instance 重新计算
         private static bool RegisterPlayerInventory(Harmony harmony)
         {
             const string Label = "PlayerInventory.ReceiveInventory";
@@ -268,7 +260,6 @@ namespace SteamP2PFriends.Patches
         }
 
         // ---------- 6. PlayerLife.ReceiveLifeStats ----------
-        // P0-1：移除非法 __ownerInfo 参数
         private static bool RegisterPlayerLife(Harmony harmony)
         {
             const string Label = "PlayerLife.ReceiveLifeStats";
@@ -310,7 +301,6 @@ namespace SteamP2PFriends.Patches
         }
 
         // ---------- 7. PlayerClothing.ReceiveClothingState ----------
-        // P0-1：移除非法 __ownerInfo 参数
         private static bool RegisterPlayerClothing(Harmony harmony)
         {
             const string Label = "PlayerClothing.ReceiveClothingState";
@@ -349,7 +339,6 @@ namespace SteamP2PFriends.Patches
         }
 
         /// <summary>
-        /// P0-3：清理指定目标上本 Harmony id 残留的 patch 元数据，避免后续自检假阳性。
         /// 使用 HarmonyPatchType.All 因 Harmony 2.9 的 Unpatch(MethodBase, string) 重载不可用。
         /// 这些 vanilla 接收方法（ReceiveInventory 等）通常不被其他插件 patch，All 范围可接受。
         /// </summary>
@@ -514,7 +503,6 @@ namespace SteamP2PFriends.Patches
             }
         }
 
-        // P0-1：移除全部 __ownerInfo 参数，每个阶段通过 __instance 重新计算 owner 信息
         private static class PlayerInventoryHooks
         {
             private const string Label = "PlayerInventory.ReceiveInventory";
@@ -553,7 +541,6 @@ namespace SteamP2PFriends.Patches
             }
         }
 
-        // P0-1：移除全部 __ownerInfo 参数
         private static class PlayerLifeHooks
         {
             private const string Label = "PlayerLife.ReceiveLifeStats";
@@ -592,7 +579,6 @@ namespace SteamP2PFriends.Patches
             }
         }
 
-        // P0-1：移除全部 __ownerInfo 参数
         private static class PlayerClothingHooks
         {
             private const string Label = "PlayerClothing.ReceiveClothingState";
@@ -635,7 +621,6 @@ namespace SteamP2PFriends.Patches
 
         /// <summary>
         /// 提取实例方法的 owner 信息：channel.IsLocalPlayer / owner SteamID / NetId / Player instanceId。
-        /// P0-1：每个阶段独立调用，不跨阶段保存。
         /// </summary>
         private static string ExtractInstanceInfo(object __instance)
         {

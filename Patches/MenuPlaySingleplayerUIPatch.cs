@@ -8,7 +8,6 @@ using System.Reflection;
 namespace SteamP2PFriends.Patches
 {
     /// <summary>
-    /// Stage 7-3 v2：在单机地图选择界面原生注入"多人联机"按钮。
     ///
     /// 蓝图 v2 §4.6：本 patch 只负责打开原生角色菜单，不直接启动 host。
     /// 启动逻辑由 P2PNativeMenuUI.TryStartHost 承接，包含地图引用刷新和依赖复验。
@@ -23,7 +22,6 @@ namespace SteamP2PFriends.Patches
         {
             try
             {
-                // v0.2.3.23 P0-C4：INVALID 硬门控 - 不注入多人按钮
                 if (!SteamP2PFriendsPlugin.DiagnosticBuildValid)
                 {
                     RoleLogger.Warn("[Shared]",
@@ -69,7 +67,6 @@ namespace SteamP2PFriends.Patches
         {
             try
             {
-                // v0.2.3.23 P0-C4：按钮点击处理器二次检查 DiagnosticBuildValid
                 if (!SteamP2PFriendsPlugin.DiagnosticBuildValid)
                 {
                     RoleLogger.Error("[Shared]",

@@ -11,7 +11,6 @@ using System.Reflection;
 namespace SteamP2PFriends.Patches
 {
     /// <summary>
-    /// SteamworksServerMultiplayerService.open() Prefix/Postfix（迁移自 LaunchP2PHostManager v2.11.0）。
     ///
     /// 根因：Steamworks 的 GameServer.Init 每个进程只能成功调用一次。退回主菜单后再开第二局时，
     /// 底层 GameServer API 仍处于存活状态（未 LogOff/Shutdown），但 isHosting 在 disconnect 后
@@ -21,16 +20,12 @@ namespace SteamP2PFriends.Patches
     ///   - 无存活会话（首局）：放行原始 open()，正常 Init + LogOn。
     ///   - 有存活会话（第二局+）：跳过 Init/LogOn，仅重新启用广告、置 isHosting=true。
     ///
-    /// v2.1 新增：serverVisibility 守卫。SDK 实测：ESteamServerVisibility 枚举仅 Internet/LAN 两值。
-    /// v0.2.2.1-test：GSLT 路线已移除，所有非专服测试分支固定 LAN visibility。
     /// </summary>
     [HarmonyPatch(typeof(SteamworksServerMultiplayerService), "open", new[] { typeof(uint), typeof(ushort), typeof(ESecurityMode) })]
     public static class SteamworksServerMultiplayerServiceOpenPatch
     {
         public static bool Prefix(SteamworksServerMultiplayerService __instance)
         {
-            // v2.1 防御性守卫：在 open() 任何内部逻辑执行前，强制矫正 serverVisibility
-            // v0.2.2 P0-A：P2P 模式固定 LAN，无视 GSLT 配置（GSLT 路线已弃用，见 HostManager.ConfigureP2POnlyBranch）
             try
             {
                 ESteamServerVisibility expected;

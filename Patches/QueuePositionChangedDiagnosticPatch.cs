@@ -8,7 +8,6 @@ using System.Reflection;
 namespace SteamP2PFriends.Patches
 {
     /// <summary>
-    /// v0.2.3.3 P0-B：ClientMessageHandler_QueuePositionChanged.ReadMessage Postfix。
     ///
     /// 设计目标：
     ///   - QueuePositionChanged 消息到达时，触发 NativeLoadingGateDumper.Dump。

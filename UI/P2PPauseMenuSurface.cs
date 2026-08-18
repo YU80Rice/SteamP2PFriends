@@ -7,7 +7,6 @@ using UnityEngine;
 namespace SteamP2PFriends.UI
 {
     // =====================================================================
-    // Stage 7-4 EscApprovalMenu [指令 B]：原版私有 UI 的窄适配层。
     //   只允许反射 typeof(PlayerPauseUI) 的私有静态字段 "container"。
     //   字段缺失/GetValue 异常/空值/非 ISleekElement/PlayerPauseUI.active=false
     //   都返回 false。失败意味着"不显示"，绝不是"改挂 PlayerUI.container"。

@@ -8,7 +8,6 @@ using System.Reflection;
 namespace SteamP2PFriends.Patches
 {
     /// <summary>
-    /// v0.2.3.32 P0-D 修复（Codex 第二十次双机测试外部审计 §5.2 方案 A 授权实施）：
     ///
     /// 根因（U3-SDK ZombieManager.cs:1448-1494 onBoundUpdated）：
     ///   - L1460 外层门控 if (Provider.isServer)
@@ -33,7 +32,6 @@ namespace SteamP2PFriends.Patches
     ///   - LogOutput-host.log:1139 SendZombies_Write #1/20 bound=10 regionZombies=0
     ///   - LogOutput-client.log:1151-1152 ReceiveZombies totalZombies_before=0 delta=0
     ///
-    /// 修复方案（Codex §5.2 方案 A，Prefix supplement 模式）：
     ///   在 vanilla onBoundUpdated Prefix 阶段，若满足以下全部条件：
     ///     1. Provider.isServer（listen host 侧）
     ///     2. !player.channel.IsLocalPlayer（远端客机进入）
@@ -77,7 +75,6 @@ namespace SteamP2PFriends.Patches
         public static bool AllRegistrationsSucceeded => OnBoundUpdatedPrefixRegistered;
 
         /// <summary>
-        /// v0.2.3.32 P0-D 手动登记：identity-based 防重复登记。
         /// </summary>
         public static bool RegisterManual(Harmony harmony)
         {
@@ -145,7 +142,6 @@ namespace SteamP2PFriends.Patches
         {
             try
             {
-                // v0.2.3.32-P0-D返修（Codex Medium）：前置 null 断言，避免依赖 catch-all 兜底隐藏诊断信息。
                 //   - player 为 null：Unity 生命周期异常场景（如 teardown 期间 onBoundUpdated 仍触发），
                 //     若无前置断言，player?.channel?.IsLocalPlayer 返回 false 会误判为远端客机进入，
                 //     继续走六条件守门并可能调用 generateZombies，语义错误。

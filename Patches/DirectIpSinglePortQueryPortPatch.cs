@@ -7,7 +7,6 @@ using System.Reflection;
 namespace SteamP2PFriends.Patches
 {
     /// <summary>
-    /// Stage 9-2: corrects the client-side query-port projection for single-port Direct-IP.
     ///
     /// Vanilla ClientTransport_SteamNetworkingSockets.TryGetQueryPort derives the query port
     /// from the remote connection port minus one (info.m_addrRemote.m_port - 1). Under the
@@ -40,7 +39,6 @@ namespace SteamP2PFriends.Patches
         }
 
         /// <summary>
-        /// Pure projection used by automated tests (Stage 9-2 R25). Never mutates real state.
         /// </summary>
         internal static bool ProjectForTest(bool originalResult, ushort originalQueryPort,
             bool isSinglePort, ushort sharedPort, out ushort projectedPort)

@@ -11,7 +11,6 @@ namespace SteamP2PFriends.Shared
     }
 
     /// <summary>
-    /// Stage 7-8: side-effect-free protocol classifier for the vanilla direct-connect field.
     /// Only individual Steam accounts are claimed by the plugin. IP/DNS, URLs and game-server
     /// Steam codes remain owned by MenuPlayConnectUI.
     /// </summary>
@@ -38,7 +37,6 @@ namespace SteamP2PFriends.Shared
 
         /// <summary>
         /// Parses the numeric IPv4 forms owned by the plugin's query-less listen-host route.
-        /// Stage 9-2: the user-supplied port is the actual reachable Steam Networking Sockets
         /// UDP port. queryPort == connectionPort == the entered port (single-port semantics).
         /// SakuraFRP maps any remote UDP port R to the host's local 27016; the client enters R.
         /// </summary>
@@ -56,7 +54,6 @@ namespace SteamP2PFriends.Shared
             int delimiter = host.LastIndexOf(':');
             if (delimiter >= 0)
             {
-                // IPv6 is intentionally outside Stage 9 scope. More than one colon is not IPv4:port.
                 if (delimiter != host.IndexOf(':')) return false;
                 if (!ushort.TryParse(host.Substring(delimiter + 1), out selectedPort)) return false;
                 host = host.Substring(0, delimiter).Trim();
@@ -72,7 +69,6 @@ namespace SteamP2PFriends.Shared
         }
 
         /// <summary>
-        /// Stage 9-2: detects the single-port Direct-IP parameter shape. The user-entered port is
         /// both the query port and the connection port. Used only for query-port projection and
         /// tests. Must never be used for whitelist or player authorization.
         /// </summary>
@@ -85,7 +81,6 @@ namespace SteamP2PFriends.Shared
         }
 
         /// <summary>
-        /// Stage 9-3: builds an explicit DNS endpoint for the player-checked "plugin DNS direct-connect"
         /// mode. Accepts any legal ASCII DNS hostname plus the entered port (single-port semantics).
         /// Never hardcodes a SakuraFRP / provider suffix, node IP or remote port.
         /// Rejects numeric IPv4, SteamIDs, URLs, IPv6/multi-colon, empty labels, consecutive dots,
@@ -122,7 +117,6 @@ namespace SteamP2PFriends.Shared
         }
 
         /// <summary>
-        /// Stage 9-3: validates a legal ASCII DNS hostname. Total length <= 253, each label <= 63.
         /// Allowed characters: A-Z a-z 0-9 '-' '.'. Rejects empty labels, consecutive dots,
         /// leading/trailing hyphens per label, and non-ASCII / control characters.
         /// IDN/Punycode is not converted; an "xn--" input is validated as ordinary ASCII labels.

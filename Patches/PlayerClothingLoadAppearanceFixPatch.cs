@@ -9,9 +9,7 @@ using UnityEngine;
 namespace SteamP2PFriends.Patches
 {
     /// <summary>
-    /// v0.2.3.24 P0-S4 修复：客机模型"除衣服外全黑"根因修复。
     ///
-    /// 根因（Codex 外部审计 §1-2 确认）：
     ///   PlayerClothing.load() 未设置 thirdClothes.skin/face/hair/beard/color/BeardColor，
     ///   HumanClothes._skinColor 保持默认 Color(0,0,0,0)，apply() 把 material._SkinColor 写为黑，
     ///   StandardClothes shader 皮肤裸露区域取 _SkinColor = 黑。
@@ -110,7 +108,6 @@ namespace SteamP2PFriends.Patches
 
             SteamPlayer owner = __instance?.channel?.owner;
             HumanClothes clothes = __instance?.thirdClothes;
-            // v0.2.3.25 修复：SteamPlayerID 重载 == 但不判空（SteamPlayerID.cs:136-139），
             // owner?.playerID == null 会调用 SteamPlayerID.==(null, null) 触发 null.steamID NRE。
             // 必须用 ReferenceEquals 判空（项目记忆铁律：SteamPlayerID == 运算符 NRE 陷阱）。
             if (ReferenceEquals(owner, null) || ReferenceEquals(owner.playerID, null) || ReferenceEquals(clothes, null))

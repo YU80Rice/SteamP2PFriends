@@ -8,13 +8,10 @@ using UnityEngine;
 namespace SteamP2PFriends.Patches
 {
     /// <summary>
-    /// v0.2.3.2 P0-D D-2：Provider.addPlayer Prefix+Postfix 诊断 patch。
     ///
-    /// v0.2.3.2 P0-1 修复（Codex 第三次审计）：
     ///   - 真实签名 30 参数：Vector3 point + byte angle，非 Transform。
     ///   - 之前误用 SteamPlayer 构造器签名，PatchAll 必定失败。
     ///
-    /// v0.2.3.2 P0-7 修复：
     ///   - 使用 FormatPrefixFor 输出精确 sid。
     ///   - 仅 addPlayer 调用 EnsureHostJoinSession（accept Prefix 不再调用）。
     /// </summary>
@@ -37,7 +34,6 @@ namespace SteamP2PFriends.Patches
             try
             {
                 ulong remoteSteamId = playerID.steamID.m_SteamID;
-                // P0-7 修复：仅在 addPlayer 建立 session（accept Prefix 不再重复调用）
                 DiagnosticContext.EnsureHostJoinSession(remoteSteamId);
 
                 string transportType = transportConnection?.GetType().Name ?? "null";

@@ -7,7 +7,6 @@ using System.Reflection;
 namespace SteamP2PFriends.Patches
 {
     /// <summary>
-    /// v0.2.3.27 P0-A 决定性诊断（Codex 第 7 节 P0-A + 静态审计返修）：
     /// ObjectManager 世界同步链路五段证据诊断。
     ///
     /// 五段证据闭环：
@@ -17,11 +16,6 @@ namespace SteamP2PFriends.Patches
     ///   4. 客机 Receive 入口：ReceiveObjects
     ///   5. Receive 后状态/拒绝门控：ObjectManager.regions[x,y].isNetworked
     ///
-    /// v0.2.3.27-P0-A 返修：
-    ///   - P0-2：新增 VerifyRegistration（identity-based，owner + MethodInfo 双重验证）
-    ///   - P0-3：补齐 askObjects Prefix（真实发送入口）
-    ///   - P0-4：改读 player.movement.loadedRegions[x,y].isObjectsLoaded
-    ///   - P1-1：onRegionUpdated 使用 TryAcquirePlayerQuota
     ///
     /// vanilla 源码（U3-SDK ObjectManager.cs）：
     ///   - onRegionUpdated: L955（step 4 askObjects 调用点 L1021）
@@ -33,7 +27,6 @@ namespace SteamP2PFriends.Patches
         private const string PointPrefix = "[WorldSyncDiag/Object]";
         private const string LoopbackTransportFullName = "SDG.NetTransport.Loopback.TransportConnection_Loopback";
 
-        // v0.2.3.27-P0-A 冒烟中止返修（Codex P0-R8）：vanilla 目标完整参数类型表，
         // 由 RegisterManual 与 VerifyRegistration 共用。
         //   - onRegionUpdated(Player, byte, byte, byte, byte, byte, ref bool)
         //   - askObjects(ITransportConnection, byte, byte) - internal 重载，与 public askObjects(CSteamID, byte, byte) 区分
@@ -65,15 +58,8 @@ namespace SteamP2PFriends.Patches
             && ReceiveObjectsPrefixRegistered && ReceiveObjectsPostfixRegistered;
 
         /// <summary>
-        /// v0.2.3.27-P0-A 手动登记（Codex 外部审计裁决 P0-R1～R8）：
         /// 4 个 hook 精确、幂等的 identity-based 手动登记。
         ///
-        /// P0-R1：所有 vanilla 目标使用完整参数类型解析（类级别 VanillaXxxParamTypes）。
-        /// P0-R2：identity-based 幂等。
-        /// P0-R3：每个 hook 独立 try/catch。
-        /// P0-R4：ReceiveObjects 的 Prefix 和 Postfix 分别精确登记、分别核验。
-        /// P0-R7：登记前预检查静默。
-        /// P0-R8：RegisterManual 与 VerifyRegistration 共用 VanillaXxxParamTypes。
         /// </summary>
         public static bool RegisterManual(Harmony harmony)
         {
@@ -126,7 +112,6 @@ namespace SteamP2PFriends.Patches
         }
 
         /// <summary>
-        /// v0.2.3.27-P0-A 冒烟中止返修（Codex P0-R8）：复用类级别 VanillaXxxParamTypes 完整参数表。
         /// </summary>
         public static bool VerifyRegistration()
         {

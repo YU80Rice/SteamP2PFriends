@@ -6,7 +6,6 @@ using SteamP2PFriends.Host;
 namespace SteamP2PFriends.Shared
 {
     /// <summary>
-    /// v0.2.3.13 新增（Codex 第八次审计 P0-A）：
     /// listen-host 远程区域同步资格 helper。
     ///
     /// 仅对以下情况返回 true：
@@ -26,9 +25,7 @@ namespace SteamP2PFriends.Shared
     /// 使用场景：
     ///   - BarricadeManager.onRegionUpdated step 2 的 SendRegion 资格门控
     ///   - StructureManager.onRegionUpdated step 1 的 askStructures 资格门控
-    ///   - 后续 v0.2.3.14 补齐 ItemManager/ObjectManager/ResourceManager 时复用
     ///
-    /// 严格禁止（Codex P0-E）：
     ///   - 不全局伪造 Dedicator.IsDedicatedServer
     ///   - 不让客机调用 BarricadeManager.load() / StructureManager.load()
     ///   - 不直接设置 loading flag
@@ -105,7 +102,6 @@ namespace SteamP2PFriends.Shared
         }
 
         /// <summary>
-        /// v0.2.3.33 P0-C-1/P0-C-2 新增：
         /// 判断当前是否为"dedicated server 或 listen host"。
         ///
         /// 此方法被 Transpiler 注入到 vanilla 的周期性状态广播门控中，
@@ -115,7 +111,6 @@ namespace SteamP2PFriends.Shared
         ///   - ZombieManager.updateRegionsAndSendZombieStates L1662（SendZombieStates 门控）
         ///   - VehicleManager.Update L2918（sendVehicleStates 门控）
         ///   - AnimalManager.Update L1057（sendAnimalStates 门控，L1019 保留）
-        ///   - ItemManager.onLevelLoaded L941（v0.2.3.34 P0-B-3 全地图预生成门控）
         ///
         /// 返回 true 时 vanilla 进入 dedicated 分支（发送状态广播），
         /// 返回 false 时 vanilla 走 else 分支或跳过（等同 listen server 普通路径）。
@@ -135,7 +130,6 @@ namespace SteamP2PFriends.Shared
         }
 
         /// <summary>
-        /// v0.2.3.13 P0-D：返回资格判定的简要描述，用于日志。
         /// 仅在 IsDedicatedOrP2PRemoteRecipient 返回 true 时由 patch 调用，
         /// 输出一次有限日志记录决定性证据。
         /// </summary>
@@ -179,7 +173,6 @@ namespace SteamP2PFriends.Shared
                 return $"loopback({transportType})";
             }
 
-            // v0.2.3.13 NRE 修复：SteamPlayerID 重载 != 但未判空，用 ?. 绕开
             ulong steamId = owner.playerID?.steamID.m_SteamID ?? 0UL;
             return $"remote(steamId={steamId},transport={transportType})";
         }

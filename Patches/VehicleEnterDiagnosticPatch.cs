@@ -6,14 +6,11 @@ using System.Reflection;
 namespace SteamP2PFriends.Patches
 {
     /// <summary>
-    /// v0.2.3.36 P0-C-1-V-a：客机载具登车诊断日志（Codex 第二十四次审计 §4.3 授权实施）。
     ///
     /// 背景：
     ///   24th 双机测试用户反馈"客机同样无法登上载具"。
-    ///   Codex 第二十四次审计 §2 Medium 项指出：Agent 原 P0-C-1-V 方案过度设计，
     ///   未定位登车失败具体环节（请求未发送 / 服务器未接收 / 验证失败）。
     ///
-    ///   Codex 建议：先增加诊断日志，确定登车失败根因，再决定是否实施驾驶同步。
     ///
     /// U3-SDK 溯源：
     ///   - D:/Agent-工作目录/U3-SDK/Assets/Runtime/Assembly-CSharp/Unturned/Managers/VehicleManager.cs:418-423
@@ -30,7 +27,6 @@ namespace SteamP2PFriends.Patches
     ///     服务端处理登车请求，验证项：null player / dead / equipment busy / arena / vehicle seated / hasValidUseable / IsEquipAnimationFinished / 等
     ///     任何一项失败都会 context.LogWarning 并静默返回
     ///
-    /// 诊断方案（Codex §4.3）：
     ///   1. Prefix patch VehicleManager.enterVehicle（客机端调用入口）
     ///      记录请求发送：instanceID / vehicle asset name
     ///   2. Prefix patch VehicleManager.ReceiveEnterVehicleRequest（服务端处理入口）

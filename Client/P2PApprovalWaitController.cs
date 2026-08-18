@@ -64,7 +64,6 @@ namespace SteamP2PFriends.Client
         private static int RemainingSeconds(float now) =>
             Math.Max(0, (int)Math.Ceiling(_nextRetryAt - now));
 
-        // ===== [P0-RETRY-BUDGET-01]：同 host 已在等待 -> 幂等，不重置预算 =====
 
         internal static void BeginAfterWhitelistRejected(ulong hostSteamId)
         {
@@ -91,7 +90,6 @@ namespace SteamP2PFriends.Client
             _expiresAt = now + ExpireSeconds;
             _nextRetryAt = now + RetrySeconds;
 
-            // v3 [P0-WAIT-UI-CANCEL-REACHABILITY-04]：先确保 UI 可见再置 _waiting=true
             if (!P2PNativeMenuUI.EnsureApprovalWaitVisible(hostSteamId, RemainingSeconds(now), Cancel))
             {
                 RoleLogger.Warn("[Client]", "[P2P-Wait] Begin: UI unavailable, not starting wait");
@@ -106,7 +104,6 @@ namespace SteamP2PFriends.Client
             RoleLogger.Info("[Client]", "[P2P-Wait] Begin: host=" + hostSteamId + " 120s内最多24次(握手耗时计入总时限)");
         }
 
-        // ===== [P0-WAIT-SUCCESS-CLEANUP-02]：批准成功后立即清除等待 =====
 
         internal static void NotifyConnectionAccepted()
         {
@@ -146,7 +143,6 @@ namespace SteamP2PFriends.Client
             return false;
         }
 
-        // ===== [P1-EXPLICIT-JOIN-OWNERSHIP-04]：显式用户加入取消旧等待 =====
 
         internal static void CancelForExplicitUserJoin()
         {
@@ -168,7 +164,6 @@ namespace SteamP2PFriends.Client
 
             int remaining = RemainingSeconds(now);
 
-            // v3 [P0-WAIT-UI-CANCEL-REACHABILITY-04]：每帧确保 UI 可见且可取消；不可见 -> fail-closed 停止
             if (!P2PNativeMenuUI.EnsureApprovalWaitVisible(_hostSteamId, remaining, Cancel))
             {
                 RoleLogger.Warn("[Client]", "[P2P-Wait] UI unavailable during Tick, stopping wait");

@@ -5,8 +5,6 @@ using SDG.Unturned;
 namespace SteamP2PFriends.Shared
 {
     // =====================================================================
-    // Stage 7-3 v3 §2[指令 A]：UI 环境隔离守卫
-    // 蓝图 v3 P0-UI-U3DS-EAGER-01 修复：所有 UI 调用点必须先过 CanTouchClientUi。
     // 不得直接读取 Dedicator.IsDedicatedServer；使用反射探测，失败一律 fail-closed。
     // 单人 / LAN / U3DS / 普通客机环境不创建本模块 UI。
     // =====================================================================

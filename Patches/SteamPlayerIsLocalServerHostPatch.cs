@@ -7,11 +7,12 @@ using SteamP2PFriends.Shared;
 using SteamP2PFriends.Shared.Enums;
 using Steamworks;
 using System.Reflection;
+using UnityEngine;
 
 namespace SteamP2PFriends.Patches
 {
     /// <summary>
-    /// v0.2.3.2 P0-C IsLocalServerHost 修正 patch（v2 审计放行后启用）。
+    /// Listen-host 模式下的 IsLocalServerHost 修正补丁。
     ///
     /// 根因（v2 §1.3 + §八 证据 1-3）：
     ///   - vanilla SteamPlayer.ctor line 786：
@@ -32,13 +33,9 @@ namespace SteamP2PFriends.Patches
     ///   - Postfix 时机有效（反编译证据：构造器 line 786 后无该字段读取）。
     ///   - 实际效果依赖 A/B 对照验证（Medium-7）。
     ///
-    /// P0-E 集成：
     ///   - 本 patch 同时调用 PlayerInitializationTracker.MarkConstructed(player)。
-    ///   - 配合 P0-E 状态表 Constructed -> Initializing -> Ready 转换。
     ///
-    /// 二次审计 Medium-1 修复：
-    ///   - 移除 [HarmonyPatch] 自动登记特性，改用 RegisterManual 手动登记。
-    ///   - FullFixBuild=false 时不登记本 patch，真正禁用 P0-C（构建 A）。
+    /// 使用显式 RegisterManual 登记，以便启动自检验证实际目标与所有者。
     /// </summary>
     public static class SteamPlayerIsLocalServerHostPatch
     {
@@ -46,6 +43,15 @@ namespace SteamP2PFriends.Patches
 
         private static FieldInfo _isLocalServerHostField;
         private static bool _registered;
+        private static readonly System.Type[] SteamPlayerConstructorParameterTypes =
+        {
+            typeof(ITransportConnection), typeof(NetId), typeof(SteamPlayerID), typeof(Transform),
+            typeof(bool), typeof(bool), typeof(int), typeof(byte), typeof(byte), typeof(byte),
+            typeof(Color), typeof(Color), typeof(Color), typeof(Color), typeof(bool),
+            typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(int),
+            typeof(int[]), typeof(string[]), typeof(string[]),
+            typeof(EPlayerSkillset), typeof(string), typeof(CSteamID), typeof(EClientPlatform)
+        };
 
         static SteamPlayerIsLocalServerHostPatch()
         {
@@ -55,28 +61,22 @@ namespace SteamP2PFriends.Patches
         }
 
         /// <summary>
-        /// 手动登记入口。由 Plugin.ApplyV2AuditFixPatches 在 FullFixBuild=true 时调用。
+        /// 手动登记入口。由插件启动过程调用。
         /// </summary>
         public static void RegisterManual(Harmony harmony)
         {
             if (_registered) return;
             _registered = true;
 
-            // 反射查找 SteamPlayer 构造器（单个 ctor，参数列表很长，用 GetConstructors 取第一个）
+            // ABI 门控：禁止按构造器列表顺序猜测目标，游戏更新后必须显式失效。
             ConstructorInfo ctor = typeof(SteamPlayer).GetConstructor(
                 BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
-                null, System.Type.EmptyTypes, null);
+                null, SteamPlayerConstructorParameterTypes, null);
             if (ctor == null)
             {
-                // 单 ctor 多参数情况，用 GetConstructors 取第一个
-                ConstructorInfo[] ctors = typeof(SteamPlayer).GetConstructors(
-                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                if (ctors.Length == 0)
-                {
-                    RoleLogger.Error("[Shared]", "[P0-C] SteamPlayer 无构造器，登记失败");
-                    return;
-                }
-                ctor = ctors[0];
+                RoleLogger.Error("[Shared]",
+                    "[Host] SteamPlayer 目标构造器签名不匹配，拒绝登记 IsLocalServerHost 修正补丁。");
+                return;
             }
 
             MethodInfo postfix = AccessTools.Method(
@@ -133,7 +133,6 @@ namespace SteamP2PFriends.Patches
                 RoleLogger.Error("[Host]", $"[P0-C] Postfix 异常: {ex}");
             }
 
-            // P0-E 集成：标记 Player 实例为 Constructed
             try
             {
                 Player player = __instance.player;

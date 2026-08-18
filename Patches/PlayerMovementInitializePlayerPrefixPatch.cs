@@ -7,7 +7,6 @@ using UnityEngine;
 namespace SteamP2PFriends.Patches
 {
     /// <summary>
-    /// v0.2.3.2 P0-J 方案 A 修正版（审计 §4.1）：
     ///   patch 点 = PlayerMovement.InitializePlayer Prefix（在 NRE 抛出前介入）。
     ///
     /// 根因（v2 §1.2 + §八 证据 7）：

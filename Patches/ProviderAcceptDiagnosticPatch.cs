@@ -7,13 +7,10 @@ using UnityEngine;
 namespace SteamP2PFriends.Patches
 {
     /// <summary>
-    /// v0.2.3.2 P0-D D-1：Provider.accept Finalizer 诊断 patch。
     ///
-    /// v0.2.3.2 P0-7 修复（Codex 第三次审计）：
     ///   - 移除 Prefix 中的 EnsureHostJoinSession 调用（单次 Ensure 由 addPlayer 负责）。
     ///   - 所有日志改用 FormatPrefixFor 输出精确 sid。
     ///
-    /// v0.2.3.1 P0-1 修复：
     ///   - Provider.accept 有 3 个重载，精确指定 internal overload 完整参数类型数组。
     ///   - 仅诊断观察：Prefix/Postfix/Finalizer 全 void，不修改行为，不吞异常。
     ///
@@ -44,7 +41,6 @@ namespace SteamP2PFriends.Patches
             try
             {
                 ulong remoteSteamId = playerID.steamID.m_SteamID;
-                // P0-7 修复：不在 accept Prefix 调用 EnsureHostJoinSession。
                 // session 由 addPlayer 唯一创建（addPlayer 是 accept 内部第一个建立 client 的调用）。
 
                 RoleLogger.Info("[Host]",

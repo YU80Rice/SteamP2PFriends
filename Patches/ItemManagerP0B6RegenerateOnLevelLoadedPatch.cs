@@ -5,23 +5,17 @@ using System.Reflection;
 namespace SteamP2PFriends.Patches
 {
     /// <summary>
-    /// v0.2.3.37 P0-B-6：onLevelLoaded Postfix 触发全地图 generateItems（Codex 第二十五次审计 §4.1 授权实施）。
     ///
     /// 背景：
-    ///   v0.2.3.36 P0-B-5 在 HostManager.OnServerHosted 回调中调用 generateItems 全地图循环，
     ///   25th 双机测试失败：OnServerHosted 时 LevelItems.spawns=null，防御检查失败跳过预生成。
     ///
     ///   25th 主机日志证据：
     ///     L530-L535 onLevelLoaded level=1/8/6 LevelItems.spawns=-1x-1 IsDedicatedOrP2PHost=False
     ///     L579      Provider.onServerHosted 回调触发
-    ///     L596-L597 P0-B-5 调用 LevelItems.spawns=null 跳过预生成
     ///     L695-L696 onLevelLoaded level=2 LevelItems.spawns=64x64 eligible=False
     ///
     ///   关键洞察：LevelItems.spawns 在 onLevelLoaded level=2（OnServerHosted 之后）时才就绪。
-    ///   P0-B-5 方案预设 OnServerHosted 时 spawns 已就绪，实际时机过早。
     ///
-    /// 修复方案（Codex §4.1 方案 A）：
-    ///   在 ItemManagerP0B3PreGeneratePatch.OnLevelLoaded_Postfix 中调用 P0-B-6 入口。
     ///   入口检查：
     ///     1. level > Level.BUILD_INDEX_SETUP（与 vanilla onLevelLoaded 门控一致）
     ///     2. _p0B6RegenerationDone == false（确保只执行一次）
@@ -32,11 +26,9 @@ namespace SteamP2PFriends.Patches
     ///     7. generateItems 方法（反射 private instance）找到
     ///   单区域 try-catch（单区域失败不影响其他区域）。
     ///
-    /// 标志位重置（Codex §4.1 Low 项补充）：
     ///   _p0B6RegenerationDone 需在以下场景重置为 false：
     ///     - HostManager.ResetHostSession()（断线重连 / 返回主菜单）
     ///     - HostManager.AbortHostStart()（启动失败回滚）
-    ///     - Level.onLevelLoaded level=1（返回主菜单，由 P0-B-6 入口的 level <= BUILD_INDEX_SETUP 判定间接处理）
     ///
     /// U3-SDK 溯源：
     ///   - D:/Agent-工作目录/U3-SDK/Assets/Runtime/Assembly-CSharp/Unturned/Level/Level.cs:31
@@ -71,24 +63,19 @@ namespace SteamP2PFriends.Patches
     public static class ItemManagerP0B6RegenerateOnLevelLoadedPatch
     {
         /// <summary>
-        /// P0-B-6 预生成是否已执行（静态标志位，确保只执行一次）。
         /// 在 ResetHostSession/AbortHostStart 中通过 ResetRegenerationFlag() 重置。
         /// </summary>
         private static bool _p0B6RegenerationDone = false;
 
         /// <summary>
-        /// P0-B-6 预生成是否已执行（公开只读，供审计/诊断）。
         /// </summary>
         public static bool RegenerationDone => _p0B6RegenerationDone;
 
         /// <summary>
-        /// P0-B-6 预生成结果摘要。
         /// </summary>
         public static string RegenerationSummary { get; private set; } = "未执行";
 
         /// <summary>
-        /// 重置 P0-B-6 标志位（在 ResetHostSession/AbortHostStart 中调用）。
-        /// Codex 第二十五次审计 §4.1 Low 项补充要求。
         /// </summary>
         public static void ResetRegenerationFlag()
         {
@@ -102,7 +89,6 @@ namespace SteamP2PFriends.Patches
         }
 
         /// <summary>
-        /// P0-B-6 入口：在 ItemManagerP0B3PreGeneratePatch.OnLevelLoaded_Postfix 中调用。
         /// 检查 spawns 就绪 + IsP2PServerActive + 未执行过时，调用 generateItems 全地图循环。
         ///
         /// 与 vanilla onLevelLoaded 门控一致：level > Level.BUILD_INDEX_SETUP 才执行。

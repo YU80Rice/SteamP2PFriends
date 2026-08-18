@@ -9,11 +9,9 @@ using UnityEngine;
 namespace SteamP2PFriends.Host
 {
     // =====================================================================
-    // Stage 7-3 v3 待审批服务（Codex 接管蓝图 v3 §3.2）
     // 进程内唯一 internal static class，只维护当前 P2P 会话的待审批集合。
     // 不写第二份持久化名单（蓝图 §5）。
     // =====================================================================
-    // v3 重构（P0-REJECT-CAPTURE-AFFINITY-03 修复）：
     //   - Prefix 只调 TryEnqueueRejectedTransportId（不访问 Unity/Provider/whitelist）
     //   - Update 主线程 drain 调 RecordWhitelistRejectedOnMainThread
     //   - volatile 会话 epoch；旧 epoch 一律丢弃
@@ -113,7 +111,6 @@ namespace SteamP2PFriends.Host
         private static readonly List<PendingJoinRequest> _pending = new List<PendingJoinRequest>();
         private static readonly HashSet<ulong> _sessionSuppressed = new HashSet<ulong>();
 
-        // v3 P0-REJECT-CAPTURE-AFFINITY-03：Prefix -> 队列 -> 主线程 drain
         private static readonly Queue<CapturedReject> _captureQueue = new Queue<CapturedReject>();
         private static readonly HashSet<ulong> _queuedSteamIds = new HashSet<ulong>();
         private static int _sessionEpoch;
@@ -366,7 +363,6 @@ namespace SteamP2PFriends.Host
                 RoleLogger.Info("[Host]",
                     $"[P2P-Approval] Approve success: steamId={steamId.m_SteamID}");
 
-                // Stage 10 指令 B: broadcast ONLY after the full transaction committed
                 // (TryAdd persisted + ReleaseAfterPersistentApproval success + pending/suppressed
                 // cleanup). Any earlier failure returns false above and never broadcasts. A
                 // broadcaster exception must not block or change the approval outcome.

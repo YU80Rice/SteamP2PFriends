@@ -9,18 +9,15 @@ using System.Reflection;
 namespace SteamP2PFriends.Patches
 {
     /// <summary>
-    /// v0.2.3.2 P0-E Player 初始化隔离 patch（v2 审计放行后启用）。
+    /// Player 初始化隔离补丁。
     ///
     /// v2 审计 §4.4 评估：
     ///   - E-1 状态表（Constructed -> Initializing -> Ready -> Failed）合理
     ///   - E-2 Update/FixedUpdate 短路必须加 P2P 模式门控 + IsLocalPlayer 排除
     ///   - E-3 Prefix/Postfix/Finalizer 三件套是标准做法
     ///   - E-4 调用 vanilla dismiss 是正确路径
-    ///   - E-7 客户端失败信息设置是 P1-G watchdog 的配套
     ///
-    /// 二次审计 Medium 修复：
-    ///   - Medium-1：移除 [HarmonyPatch] 自动登记，改用 RegisterManual，FullFixBuild=false 时不登记。
-    ///   - Medium-3：ExtractPlayer 缓存 PropertyInfo，避免每帧反射。
+    /// 手动注册以保证目标和所有者可验证；ExtractPlayer 缓存 PropertyInfo，避免每帧反射。
     /// </summary>
     public static class PlayerUpdateGuardPatch
     {
@@ -30,7 +27,7 @@ namespace SteamP2PFriends.Patches
 
         public static void RegisterManual(Harmony harmony)
         {
-            // E-3：Player.InitializePlayer 状态机（RegisterManual，FullFixBuild=false 时不登记）
+            // Player.InitializePlayer 状态机。
             RegisterInitializePlayerStatePatch(harmony);
 
             // E-2：PlayerMovement.Update 短路
@@ -147,7 +144,6 @@ namespace SteamP2PFriends.Patches
 
     /// <summary>
     /// E-3 Player.InitializePlayer 状态机（RegisterManual，无 [HarmonyPatch] 特性）。
-    /// 第四次审计 P0-1 修复：
     ///   - Prefix 改为返回 bool：非 P2P 主机返回 true；首次调用 __state=true 返回 true；
     ///     真正重复调用 __state=false 返回 false（真正阻止原方法）。
     ///   - Postfix 仅在 __state && __runOriginal 时 MarkReady。

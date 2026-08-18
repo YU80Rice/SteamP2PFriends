@@ -8,7 +8,6 @@ using Steamworks;
 namespace SteamP2PFriends.Patches
 {
     /// <summary>
-    /// Callback 注册管道重定向 2 方法（v0.2.1 修订：与 SteamUserP2PRedirectPatch 同步门控）。
     ///
     /// 致命痛点：vanilla ServerTransport_SteamNetworkingSockets.Initialize 用
     ///   Callback<SteamNetConnectionStatusChangedCallback_t>.CreateGameServer(handler)
@@ -21,7 +20,6 @@ namespace SteamP2PFriends.Patches
     ///
     /// 本 patch 拦截 Callback<T>.CreateGameServer，重定向到 Callback<T>.Create（SteamUser 版）。
     ///
-    /// v0.2.1 门控：仅 P2P 模式启用（与 SteamUserP2PRedirectPatch 一致），LAN 模式放行原生。
     /// </summary>
     public static class CallbackCreateGameServerRedirectPatch
     {
@@ -35,7 +33,6 @@ namespace SteamP2PFriends.Patches
         {
             if (!ShouldRedirect) return true;
             __result = Callback<SteamNetConnectionStatusChangedCallback_t>.Create(func);
-            // v0.2.2.2：改用 Info 级别，确保双机测试时一定打印
             RoleLogger.Info("[Host]", "[P2P-SteamUser] Callback<SteamNetConnectionStatusChangedCallback_t>.CreateGameServer 重定向到 SteamUser Create");
             return false;
         }
@@ -48,7 +45,6 @@ namespace SteamP2PFriends.Patches
         {
             if (!ShouldRedirect) return true;
             __result = Callback<SteamNetAuthenticationStatus_t>.Create(func);
-            // v0.2.2.2：改用 Info 级别，确保双机测试时一定打印
             RoleLogger.Info("[Host]", "[P2P-SteamUser] Callback<SteamNetAuthenticationStatus_t>.CreateGameServer 重定向到 SteamUser Create");
             return false;
         }

@@ -10,10 +10,7 @@ using System.Reflection;
 namespace SteamP2PFriends.Patches
 {
     /// <summary>
-    /// v0.2.3.20 D-Vis-16 诊断 patch（NetMessage 客机投递路径追踪 - 调整后目标）。
     ///
-    /// 审计授权：外部审计报告-第十三次双机测试-v0.2.3.19-修订版验收 §9.2 授权实施。
-    /// 审计要求（§9.1 修正 3）：原 D-Vis-16 目标"追踪 Loopback 失败"基于误读的 P1 根因（L624 remote=
     /// 76561199030780228 是主机自身 SteamID，Loopback 异常与客机通信无关）。调整为追踪所有 NetMessage
     /// 发送给客机的实际投递路径与成功率。
     ///

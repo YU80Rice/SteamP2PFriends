@@ -8,7 +8,6 @@ using UnityEngine;
 namespace SteamP2PFriends.Patches
 {
     /// <summary>
-    /// v0.2.3.27 P0-A 决定性诊断（Codex 第 7 节 P0-A + 静态审计返修）：
     /// VehicleManager 世界同步链路五段证据诊断。
     ///
     /// 五段证据闭环：
@@ -18,17 +17,8 @@ namespace SteamP2PFriends.Patches
     ///   4. 客机 Receive 入口：ReceiveMultipleVehicles（初始全量）+ ReceiveVehicleStates（周期状态）
     ///   5. Receive 后状态：客机 vehicles.Count
     ///
-    /// v0.2.3.27-P0-A 返修：
-    ///   - P0-2：新增 VerifyRegistration（identity-based，owner + MethodInfo 双重验证；
     ///     容忍 InitialStateReceiveDiagnosticPatch 在 ReceiveMultipleVehicles 上同 owner 共存）
-    ///   - P0-3：补齐 sendVehicleStates Prefix（真实发送入口）+ ReceiveVehicleStates Prefix
-    ///   - P1-2：ReceiveVehicleStates 与 ReceiveMultipleVehicles 分开记录
-    ///   - P1-4：Loopback 精确 FullName 常量
-    ///   - P1-5：_lastUpdateLogTime 通过 RegisterSessionResetCallback 纳入 ResetAll
     ///
-    /// v0.2.3.27-P0-A 冒烟中止返修（Codex P0-R7/P0-R8）：
-    ///   - P0-R7：IsPatchRegistered 新增 logWhenMissing，登记前预检查静默
-    ///   - P0-R8：5 个 vanilla 目标完整参数表移到类级别 VanillaXxxParamTypes，
     ///     RegisterManual 与 VerifyRegistration 共用
     ///
     /// vanilla 源码（U3-SDK VehicleManager.cs）：
@@ -45,7 +35,6 @@ namespace SteamP2PFriends.Patches
         private const float UpdateLogInterval = 5.0f;
         private static float _lastUpdateLogTime = -100f;
 
-        // v0.2.3.27-P0-A 冒烟中止返修（Codex P0-R8）：vanilla 目标完整参数类型表，
         // 由 RegisterManual 与 VerifyRegistration 共用。
         //   - Update() 无参数
         //   - sendVehicleStates() 无参数（private instance）
@@ -75,7 +64,6 @@ namespace SteamP2PFriends.Patches
 
         static VehicleManagerWorldSyncDiagnosticPatch()
         {
-            // P1-5：注册会话重置回调
             WorldSyncDiagnosticCore.RegisterSessionResetCallback(() => _lastUpdateLogTime = -100f);
         }
 
@@ -90,14 +78,8 @@ namespace SteamP2PFriends.Patches
             && ReceiveVehicleStatesPrefixRegistered;
 
         /// <summary>
-        /// v0.2.3.27-P0-A 手动登记（Codex 外部审计裁决 P0-R1～R8）：
         /// 5 个 hook 精确、幂等的 identity-based 手动登记。
         ///
-        /// P0-R1：所有 vanilla 目标使用完整参数类型解析（类级别 VanillaXxxParamTypes）。
-        /// P0-R2：identity-based 幂等，容忍 InitialStateReceiveDiagnosticPatch 在 ReceiveMultipleVehicles 上同 owner 共存。
-        /// P0-R3：每个 hook 独立 try/catch。
-        /// P0-R7：登记前预检查静默（logWhenMissing=false）。
-        /// P0-R8：RegisterManual 与 VerifyRegistration 共用类级别 VanillaXxxParamTypes。
         /// </summary>
         public static bool RegisterManual(Harmony harmony)
         {
@@ -159,7 +141,6 @@ namespace SteamP2PFriends.Patches
         }
 
         /// <summary>
-        /// v0.2.3.27-P0-A 冒烟中止返修（Codex P0-R8）：复用类级别 VanillaXxxParamTypes 完整参数表，
         /// 与 RegisterManual 使用同一套 Type[]。
         /// </summary>
         public static bool VerifyRegistration()
@@ -180,7 +161,6 @@ namespace SteamP2PFriends.Patches
                     typeof(VehicleManager), "sendVehicleStates", sendVehicleStatesPre, HarmonyPatchType.Prefix, VanillaSendVehicleStatesParamTypes);
                 SpawnVehicleInternalPrefixRegistered = WorldSyncDiagnosticCore.IsPatchRegistered(
                     typeof(VehicleManager), "spawnVehicleInternal", spawnVehicleInternalPre, HarmonyPatchType.Prefix, VanillaSpawnVehicleInternalParamTypes);
-                // Codex TC-S6 关键修复：ReceiveMultipleVehicles 上已有同 owner 的
                 // InitialStateReceiveDiagnosticPatch.Prefix，旧版 CountPatches 会得到 2，
                 // 按 expected=1 直接 FAIL。改为 identity-based 后只要我们自己的 MethodInfo
                 // 在 patches 列表中即视为注册成功。
@@ -335,7 +315,6 @@ namespace SteamP2PFriends.Patches
         }
 
         // ============= 5. 客机 Receive 入口：ReceiveVehicleStates（周期状态） =============
-        // P1-2：周期状态包独立诊断
         [HarmonyPrefix]
         [HarmonyPatch(typeof(VehicleManager), "ReceiveVehicleStates")]
         public static void ReceiveVehicleStates_Prefix()

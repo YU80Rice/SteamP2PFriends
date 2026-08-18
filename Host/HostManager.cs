@@ -14,31 +14,8 @@ using UnityEngine;
 namespace SteamP2PFriends.Host
 {
     /// <summary>
-    /// 房主协调器（v0.2 合并版）。
-    ///
-    /// 设计哲学：以原版 SteamP2PFriends 的 listen server 设计为骨架（OnServerHosted 同步订阅 +
-    /// LoadClientHostedLevel + AbortHostStart 事务性回滚），以 LaunchP2PHostManager v2.11.0
-    /// 的 BepInEx 适配层为肌肉（动力泵 + HasCheatsGuard + 会话复用 + GSLT 双分支）。
-    ///
-    /// 启动序列（对齐原版 StartHostingCore + A 方 StartP2PServer）：
-    ///   1. ResetHostSession（清理 Provider 静态残留）
-    ///   2. ConfigureCommonServerSettings（map/mode/maxPlayers/cheats/serverID）
-    ///   3. PrepareClientHostSession（B 方 ConfigData.CreateDefault + LoadGameplayConfig）
-    ///   4. ConfigureGsltBranch（A 方 Internet/LAN 双分支，默认 LAN）
-    ///   5. EnsurePreviousGameServerClosed（反射 close 残留）
-    ///   6. 订阅 Provider.onServerHosted（B 方同步事务性订阅）
-    ///   7. Provider.host()
-    ///   8. host() 返回后检查 IsStarting（AbortHostStart 可能在 host() 内回滚）
-    ///   9. 检查 Provider.isServer + serverTransport != null
-    ///   10. SteamGameServerCallbacksWatcher.StartWatching（动力泵启动）
-    ///   11. EnsureListenServerClientFlag（_isClient=true + _client=Provider.user）
-    ///   12. OverrideServerToHostUser（_server=Provider.user）
-    ///   13. 检测 SteamGameServer 存活 -> OnSteamServerReady 或订阅 ready
-    ///
-    /// 关键时序约束（A 方 v2.11 实测血泪）：
-    ///   - EnsureListenServerClientFlag() 必须在 Provider.host() 完成后调用
-    ///   - vanilla openGameServer() 开头检查 if (isServer || isClient) return;
-    ///   - 若在 host() 前设 _isClient=true，openGameServer 早返回，SteamGameServer 永不初始化
+    /// SteamUser P2P listen-host 房主协调器。
+    /// 启动和退出均采用会话化状态；任何关键初始化失败均经 AbortHostStart 回滚，禁止部分启动。
     /// </summary>
     public static class HostManager
     {
@@ -54,14 +31,10 @@ namespace SteamP2PFriends.Host
         internal static bool IsStarting => _isStarting;
 
         /// <summary>
-        /// v0.2.3.2 P0-J/E：P2P 主机模式判定（公开给 Patches 层使用）。
         /// 仅当 _hostMode == P2P 且 IsP2PServerActive 时返回 true。
-        /// 用于 P0-J PlayerMovement.InitializePlayer Prefix 与 P0-E Update 护栏的 P2P 门控。
         /// </summary>
         public static bool IsP2PHostMode => _hostMode == EHostMode.P2P && IsP2PServerActive;
 
-        // LAN 测试模式重复 Steam ID 绕过深度计数
-        private static int _lanJoinDuplicateCheckBypassDepth;
         private static bool _savedOfflineOnly;
         private static bool _restoredOfflineOnly;
         private static bool _offlineAuthEnabled;
@@ -78,7 +51,6 @@ namespace SteamP2PFriends.Host
         private static bool _loggedListenActive;
         private static bool _listenBusy;
 
-        // v0.2.3.15 P0-D：房主 ESC 暂停状态检测（多重指示器）
         // 审计员要求：必须同时检测 LoadingUI.isBlocked + Time.timeScale==0 + MenuUI 状态
         private static bool _lastEscPaused;
         private static float _escPausedSince;
@@ -87,7 +59,6 @@ namespace SteamP2PFriends.Host
 
         private static bool _subscribedServerHosted;
 
-        // Codex 103rd 全流程接管蓝图 §5.1：Stage 6B-2 P2P 启动 token
         private static Guid _stage6BStartToken = Guid.Empty;
 
         /// <summary>
@@ -96,8 +67,8 @@ namespace SteamP2PFriends.Host
         public static void StartP2PServer(string mapName, string serverName, byte maxPlayers, EGameMode mode,
             bool cheats, P2PRoomRules roomRules = null)
         {
-            // v0.2.3.23 P0-C4：DiagnosticBuildValid 硬门控
-            //   审计报告-Codex §3 P0-Critical-4 要求：HostManager.StartP2PServer 开头硬检查
+            if (!RequireGameThread(nameof(StartP2PServer))) return;
+
             //   DiagnosticBuildValid，在任何状态写入之前返回。
             //   防止 INVALID 时菜单按钮虽然不注入，但其他调用路径仍能触发 StartP2PServer。
             if (!SteamP2PFriendsPlugin.DiagnosticBuildValid)
@@ -123,9 +94,7 @@ namespace SteamP2PFriends.Host
                 return;
             }
 
-            // v0.2.3.40 Stage 6A-1 P0-1（Codex 80th §1.1）：
             //   入口守门必须在 ResetHostSession() 之前执行，否则 ResetHostSession 的 finally
-            //   会无条件清空 Stage6ASessionContext，使 BeginSession() 的"残留会话 fail-closed"永不可触发。
             //   守门条件：活动会话存在 / P2P 已激活 / Provider 仍处于 server 状态 -> 拒绝并返回。
             if (IsP2PServerActive || Stage6ASessionContext.IsActive || Provider.isServer)
             {
@@ -145,19 +114,16 @@ namespace SteamP2PFriends.Host
                 _isStarting = true;
                 SteamReadyHandled = false;
 
-                // v0.2.3.13 返修 P0-3（Codex v0.2.3.13 外部审计报告）：
                 //   开新服前清除 RegionSync 计数 + RenderProbe 状态，避免上一局会话残留计数
                 //   导致新会话同 SteamID 玩家的诊断日志被静默。
                 try
                 {
                     Patches.BarricadeManagerRegionSyncPatch.ResetAll();
                     Patches.StructureManagerRegionSyncPatch.ResetAll();
-                    // v0.2.3.29 P0-B：新增三个 RegionSync patch 的 ResetAll
                     Patches.ItemManagerRegionSyncPatch.ResetAll();
                     Patches.ResourceManagerRegionSyncPatch.ResetAll();
                     Patches.ObjectManagerRegionSyncPatch.ResetAll();
                     RemotePlayerRenderProbe.ResetAll();
-                    // v0.2.3.27 P0-A：WorldSyncDiagnosticCore 世界同步诊断计数清零（第二局开服重置）
                     Patches.WorldSyncDiagnosticCore.ResetAll();
                     Patches.P2PListenHostCommandPermissionPatch.ResetForSession();
                 }
@@ -177,10 +143,7 @@ namespace SteamP2PFriends.Host
 
                 // B 方 ConfigureCommonServerSettings；测试版固定 SteamUser P2P-only
                 ConfigureCommonServerSettings(level, mode, maxPlayers, cheats);
-                // Stage 6A（Codex 79th §1）：入口快照槽位 + 切换 serverID 到 Singleplayer_<slot> + 检测历史目录
                 // 依据：U3-SDK Provider.cs:2054 singleplayer() 设 Dedicator.serverID = "Singleplayer_" + Characters.selected
-                // v2.3 返修（Codex 78th P0-1）：BeginSession 异常直接进入 StartP2PServer 现有外层 catch
-                // v2.1 返修（Codex 76th P0-6）：DetectLegacyP2PSaveDirectory 唯一位置在 serverID 设置后、PrepareClientHostSession 和 host 之前
                 Stage6ASessionContext.BeginSession(EHostMode.P2P, Characters.selected);
                 Provider.serverID = "Singleplayer_" + Stage6ASessionContext.CachedSlot;
                 DetectLegacyP2PSaveDirectory();
@@ -194,23 +157,19 @@ namespace SteamP2PFriends.Host
                 // B 方 PrepareClientHostSession（ConfigData.CreateDefault + LoadGameplayConfig）
                 PrepareClientHostSession();
 
-                // Codex 103rd 全流程接管蓝图 §5.2：Stage 6B-2 P2P pre-build 清理 + Build + Commit
                 string stage6BFailure;
                 if (!TryPrepareStage6BForP2PStart(level, out stage6BFailure))
                     throw new InvalidOperationException(stage6BFailure);
 
-                // v0.2.1 F-7 修复：P2P 模式也启用 offlineOnly，跳过 SteamGameServer 票据校验
                 // 原因：客机票据锁定房主个人 SteamID（ClientMessageHandler_Verify.cs:17-20），
                 // 但主机校验在匿名 GameServer identity（Provider.cs:5300）-> 身份错配 -> AUTH_VERIFICATION 拒绝。
                 // offlineOnly=true 让 vanilla 跳过票据校验（ServerMessageHandler_Authenticate.cs:38-47）。
-                EnableLanOfflineAuth();
+                EnableListenHostOfflineAuth();
 
-                // v0.2.2 P0-A 修复：P2P 模式固定 SteamUser identity P2P-only，不再走 GSLT/FakeIP/GS-ID 路线。
                 // 原因：
                 //   1. offlineOnly=true 已跳过票据校验，GSLT 不再解决任何认证问题
                 //   2. GSLT token 会触发 serverVisibility=Internet，导致 SteamGameServer 尝试注册公网 SDR 路由
                 //      但 listen server 模式 appInfo.isDedicated=false -> SDR 路由不可用（FACT.md 铁律）
-                //   3. FakeIP 路线在 v2.9.0 已验证不可行
                 //   4. GS-ID "Server Code" 在 F-8 已弃用，Rich Presence/Lobby/剪贴板统一用 SteamUser ID
                 // 因此 P2P 模式强制 LAN 可见性 + 清空 GSLT token + 禁用 FakeIP，避免任何 GS-identity 路径。
                 ConfigureP2POnlyBranch();
@@ -223,7 +182,6 @@ namespace SteamP2PFriends.Host
                 Provider.onEnemyConnected += OnPlayerConnectedToServer;
                 RoleLogger.Info("[Host]", "已订阅 Provider.onEnemyConnected");
 
-                // Stage 7-2-2（Codex 133rd §2.3）：P2P 白名单 bootstrap
                 //   蓝图强制时序：所有既有前置成功后、紧接 StartHostingCore() 前。
                 //   bootstrap 失败抛 InvalidOperationException -> 外层 catch -> AbortHostStart 收敛。
                 //   bootstrap 失败不调 Provider.disconnect()（设计 §4.3）。
@@ -232,14 +190,12 @@ namespace SteamP2PFriends.Host
                 if (!P2PWhitelistService.TryBootstrap(Provider.user, out whitelistFailure))
                     throw new InvalidOperationException("P2P whitelist bootstrap failed: " + whitelistFailure);
 
-                // Stage 7-3 v2 §4.7：P2P 会话开始前清空待审批/抑制集合/UI 状态
                 try { P2PJoinApprovalService.ResetForSession(); }
                 catch (Exception apEx) { RoleLogger.Warn("[Host]", "[P2P-Approval] ResetForSession 异常（不阻断）: " + apEx); }
                 try { P2PQuarantineAdmissionService.ResetForSession(); }
                 catch (Exception qEx) { RoleLogger.Warn("[Host]", "[P2P-Quarantine] ResetForSession 异常（不阻断）: " + qEx); }
                 try { SteamPersonaDisplay.ResetForSession(); }
                 catch (Exception nameEx) { RoleLogger.Warn("[Host]", "[P2P-Persona] ResetForSession 异常（不阻断）: " + nameEx.GetType().Name); }
-                // Stage 10 指令 J：新会话前清空世界播报会话状态（expected departure/死亡代次/限频窗）。
                 //   不得重复订阅死亡事件；ResetForSession 只清状态。
                 try { P2PWorldStatusBroadcaster.ResetForSession(); }
                 catch (Exception wbEx) { RoleLogger.Warn("[Host]", "[WorldBroadcast] ResetForSession (Start) 异常（不阻断）: " + wbEx.GetType().Name); }
@@ -273,11 +229,7 @@ namespace SteamP2PFriends.Host
                 }
 
                 IsP2PServerActive = true;
-                // Stage 6A（Codex 79th §1）：启动成功后标记会话成功 + 输出会话启动诊断
-                // v2.3 返修（Codex 78th P1-1）：固定在 IsP2PServerActive=true 之后
-                // v2.1 返修（Codex 76th P0-5）：MarkStartSucceeded 必须先于 LogStage6ASessionStart
                 Stage6ASessionContext.MarkStartSucceeded();
-                // v0.2.3.40 Stage 6A-1（Codex 83rd §3.2 #1）：观察器 Begin 在 MarkStartSucceeded 之后、LogStage6ASessionStart 之前
                 Stage6ASaveRoundtripObserver.Begin(
                     Stage6ASessionContext.SessionId,
                     Stage6ASessionContext.CachedSlot);
@@ -296,7 +248,8 @@ namespace SteamP2PFriends.Host
         /// </summary>
         public static void StartLanServer(string mapName, EGameMode mode, byte maxPlayers, bool cheats, ushort queryPort)
         {
-            // v0.2.3.23 P0-C4：DiagnosticBuildValid 硬门控
+            if (!RequireGameThread(nameof(StartLanServer))) return;
+
             if (!SteamP2PFriendsPlugin.DiagnosticBuildValid)
             {
                 RoleLogger.Error("[Host]",
@@ -344,7 +297,7 @@ namespace SteamP2PFriends.Host
                 Provider.port = queryPort;
 
                 PrepareClientHostSession();
-                EnableLanOfflineAuth();
+                EnableListenHostOfflineAuth();
                 EnsurePreviousGameServerClosed();
 
                 MenuUI.closeAll();
@@ -437,7 +390,6 @@ namespace SteamP2PFriends.Host
                 Type providerType = typeof(Provider);
                 CSteamID localUser = Provider.user;
 
-                // v0.2.2 P0-B：记录关键状态用于诊断
                 RoleLogger.Info("[Host]",
                     $"[Diag] OnServerHosted: Provider.user={localUser.m_SteamID} " +
                     $"_server={((CSteamID)ReflectionUtil.GetStaticField(providerType, "_server")).m_SteamID} " +
@@ -461,10 +413,8 @@ namespace SteamP2PFriends.Host
                     throw new InvalidOperationException("serverTransport is null in OnServerHosted");
                 }
 
-                // v0.2.2 P0-B：验证 listen socket 已被重定向 patch 创建
                 LogListenSocketDiagnostics();
 
-                // v0.2.3.5 P0-4：主机 listen socket 创建后 relay/auth readiness 快照
                 try
                 {
                     SteamP2PFriends.Shared.SnsDiagnosticUtil.SnapshotRelayAuthReadiness("[Host]", "ListenSocket-created");
@@ -474,7 +424,6 @@ namespace SteamP2PFriends.Host
                     RoleLogger.Warn("[Host]", $"[Diag] SnapshotRelayAuthReadiness 异常（不阻断）: {ex.Message}");
                 }
 
-                // v0.2.3.17 P0-E：手动填充 serverHashes（绕过 vanilla IsDedicatedServer 守卫）
                 // 根因：vanilla MasterBundleValidation.initialize 仅 dedicated server 调用，
                 // listen server 模式下 serverHashes=null，导致服务端 effective hash 计算与客机端不一致。
                 try
@@ -493,7 +442,6 @@ namespace SteamP2PFriends.Host
                     RoleLogger.Error("[Host]", $"[OnServerHosted] MasterBundleHashInitializer 异常（不阻断）: {ex}");
                 }
 
-                // Codex 103rd 全流程接管蓝图 §5.4：Stage 6B-2 OnServerHosted mapping（仅 P2P）
                 if (_hostMode == EHostMode.P2P)
                 {
                     if (!_isStarting || _stage6BStartToken == Guid.Empty)
@@ -503,7 +451,6 @@ namespace SteamP2PFriends.Host
                         throw new InvalidOperationException("Stage6B server mapping rejected: " + stage6BFailure);
                 }
 
-                // Codex P0-LIT-02 R2 §3.1：在 _server/_client 对齐 + serverTransport 非空守卫后、
                 //   LoadClientHostedLevel 前，反射调用 LIT BeginScope("p2p", map, slot)。
                 //   LIT 缺席：日志跳过；LIT 已安装但作用域失败：抛异常走外层 catch -> AbortHostStart。
                 if (_hostMode == EHostMode.P2P)
@@ -512,16 +459,12 @@ namespace SteamP2PFriends.Host
                 // B 方：主动加载地图（根治客机进度条卡死）
                 LoadClientHostedLevel();
 
-                // v0.2.3.37 P0-B-6：移除 OnServerHosted 中的 P0-B-5 调用
-                //   25th 测试证明 P0-B-5 在 OnServerHosted 时机过早（LevelItems.spawns=null），
-                //   P0-B-6 改为在 ItemManagerP0B3PreGeneratePatch.OnLevelLoaded_Postfix 中触发，
                 //   检测 spawns 就绪（onLevelLoaded level=2）后调用 generateItems 全地图循环。
                 //   详见 Patches/ItemManagerP0B6RegenerateOnLevelLoadedPatch.cs。
 
                 // 模式分支
                 if (_hostMode == EHostMode.P2P)
                 {
-                    // v0.2.3.23 P0-C2：CreateRoomAndLinkOnReady 改为 fail-closed，
                     //   未初始化时返回 false，必须抛异常进入 AbortHostStart 事务性回滚。
                     bool lobbyOk = P2PLobbyManager.CreateRoomAndLinkOnReady();
                     if (!lobbyOk)
@@ -529,7 +472,6 @@ namespace SteamP2PFriends.Host
                         throw new InvalidOperationException(
                             "P2PLobbyManager.CreateRoomAndLinkOnReady 返回 false（未初始化或 fail-closed 拒绝）");
                     }
-                    // v0.2.1 F-8：Rich Presence 在此发布，不依赖 OnSteamServerReady
                     //（F-7 offlineOnly=true 时 ready 回调可能不触发）
                     PublishP2PRichPresence();
                     RoleLogger.Info("[Host]",
@@ -550,14 +492,11 @@ namespace SteamP2PFriends.Host
         }
 
         /// <summary>
-        /// Codex P0-LIT-02 R2 §3.1：可选 LIT P2P 作用域熔断桥接。
         ///
         /// 调用时机：OnServerHosted 内，_server/_client 已对齐到 Provider.user、serverTransport 非空、
-        /// Stage6B workshop mapping 完成、LoadClientHostedLevel 调用前。
         ///
         /// 行为契约：
         ///   - LIT 未安装：日志 Info "[LIT] not installed; P2P fault scope bridge skipped." 后正常返回，P2P 继续启动。
-        ///   - LIT 已安装但 Stage6A 上下文未稳定 / Listen Host 身份未对齐 / Provider.map 为空 /
         ///     BeginScope API 缺失或签名不匹配 / BeginScope 返回 false：抛 InvalidOperationException，
         ///     由外层 OnServerHosted catch 捕获并调用 AbortHostStart，房主启动 fail-closed 中止。
         ///   - LIT 已安装且 BeginScope 返回 true：日志 Info "[LIT] P2P fault scope ready: ..."，P2P 继续启动。
@@ -652,7 +591,6 @@ namespace SteamP2PFriends.Host
         }
 
         /// <summary>
-        /// v0.2.2 P0-B：listen socket 诊断日志。
         /// 验证 SteamUserP2PRedirectPatch 已将 CreateListenSocketP2P 重定向到 SteamNetworkingSockets。
         /// </summary>
         private static void LogListenSocketDiagnostics()
@@ -676,8 +614,6 @@ namespace SteamP2PFriends.Host
 
         /// <summary>
         /// Steam 后端 ready 回调（A 方保留，双订阅 fallback）。
-        /// v0.2.1 F-7：offlineOnly=true 时此回调可能不触发，Rich Presence 已移至 OnServerHosted。
-        /// v0.2.1 F-8：不再依赖 GS SteamID，所有显示/发布改用 SteamUser ID。
         /// </summary>
         private static void OnSteamServerReady()
         {
@@ -740,8 +676,6 @@ namespace SteamP2PFriends.Host
         {
             Type providerType = typeof(Provider);
 
-            // Stage 6A P1-4：配置加载前验证槽位一致性
-            // v2.1 返修（Codex 76th P0-3）：仅在 P2P 模式下校验，避免 LAN 路径因 CachedSlot=-1 必然 Abort
             if (_hostMode == EHostMode.P2P)
             {
                 if (!Stage6ASessionContext.IsActive ||
@@ -763,12 +697,8 @@ namespace SteamP2PFriends.Host
 
             ReflectionUtil.SetStaticField(providerType, "_configData", configData);
 
-            // Stage 6A：补齐 vanilla Provider.singleplayer L2097 步骤
             // 依据：U3-SDK Provider.cs:2097 _modeConfigDataOverrides.Clear() 必须在 LoadGameplayConfig 之前调用
             // 真实类型：Provider.cs:4528-4531 private static Dictionary<FieldInfo, object> _modeConfigDataOverrides
-            // Codex 75th P0-2：按 IDictionary 清理并验证 Count，fail-closed 进入 Abort
-            // v2.3 返修（Codex 78th §1.1）：System.Collections.IDictionary 固定使用完整限定名
-            // v2.1 返修（Codex 76th P0-3）：Clear 在 P2P 和 LAN 都执行，对齐 vanilla 行为
             FieldInfo overridesField = AccessTools.Field(providerType, "_modeConfigDataOverrides");
             if (overridesField == null)
             {
@@ -810,7 +740,6 @@ namespace SteamP2PFriends.Host
             ReflectionUtil.SetStaticField(providerType, "isThirdpartyAntiCheatActive", false);
             ReflectionUtil.SetStaticField(providerType, "_currentServerAdvertisement", null);
 
-            // Stage 7-2-2（Codex 133rd §2.3）：删除 SteamWhitelist.load()；
             //   白名单初始化移交 P2PWhitelistService.TryBootstrap() 经 IWhitelistStore.Load() 完成。
             //   SteamBlacklist/Adminlist.load() 保留。
             SteamBlacklist.load();
@@ -853,7 +782,6 @@ namespace SteamP2PFriends.Host
 
         /// <summary>
         /// GSLT 分支选择（仅 LAN 测试模式使用）。
-        /// v0.2.2 P0-A：P2P 模式已改用 ConfigureP2POnlyBranch，此方法仅保留给 LAN 模式调用。
         /// </summary>
         private static void ConfigureGsltBranch()
         {
@@ -887,7 +815,6 @@ namespace SteamP2PFriends.Host
         }
 
         /// <summary>
-        /// v0.2.2 P0-A：P2P 模式固定 SteamUser identity P2P-only 配置。
         /// 强制 LAN 可见性 + 清空 GSLT token + 禁用 FakeIP + 禁用 VAC，
         /// 避免 SteamGameServer 试图注册公网 SDR 路由（listen server 铁律：不可行）。
         /// </summary>
@@ -973,7 +900,6 @@ namespace SteamP2PFriends.Host
         }
 
         /// <summary>
-        /// 发布 P2P Rich Presence（v0.2.1 F-8：改用 SteamUser ID，不再用 GS SteamID）。
         /// 重定向后 GS identity 上没有监听 socket，好友经 Rich Presence 加入或手输"Server Code"
         /// 必然连空。统一发布个人 SteamID，与 lobby、剪贴板路径一致。
         /// </summary>
@@ -981,7 +907,6 @@ namespace SteamP2PFriends.Host
         {
             try
             {
-                // v0.2.1 F-8：connect 字段改用 SteamUser ID（房主个人 SteamID）
                 string hostSteamId = SteamUser.GetSteamID().m_SteamID.ToString();
                 if (!string.IsNullOrEmpty(hostSteamId) && hostSteamId != "0")
                 {
@@ -1003,8 +928,6 @@ namespace SteamP2PFriends.Host
             {
                 RoleLogger.Info("[Host]", "[P2P] 正在清理 Provider 静态残留…");
 
-                // v0.2.3.37 P0-B-6：重置预生成标志位（Codex 第二十五次审计 §4.1 Low 项补充）
-                //   断线重连/返回主菜单后再开新房间时，允许 P0-B-6 重新执行
                 try
                 {
                     Patches.ItemManagerP0B6RegenerateOnLevelLoadedPatch.ResetRegenerationFlag();
@@ -1027,8 +950,6 @@ namespace SteamP2PFriends.Host
                     monitorFi.SetValue(null, null);
                 }
 
-                // Codex 103rd 全流程接管蓝图 §5.5：删除仅清 _serverWorkshopFileIDs 的旧块；
-                //   Stage6B 统一通过 HostManager.TryCleanupStage6BForExit gateway 清理双列表 + mapping。
 
                 object nilSteamId = SteamRuntime.CreateCSteamID(0);
                 if (nilSteamId != null)
@@ -1045,8 +966,6 @@ namespace SteamP2PFriends.Host
             }
             finally
             {
-                // v2.3 返修（Codex 78th P0-2）：在现有 catch 后新增 finally，保证 Stage6A 上下文清理
-                // v2.2 返修（Codex 77th P0-2）：Stage6ASessionContext.Reset() 必须放入 finally
                 Stage6ASessionContext.Reset();
             }
         }
@@ -1058,7 +977,6 @@ namespace SteamP2PFriends.Host
         {
             RoleLogger.Error("[Host]", $"!!! AbortHostStart: {userMessage} !!!");
 
-            // Codex 103rd 全流程接管蓝图 §5.6：在 _hostMode=None 前捕获 wasP2P
             bool wasP2P = _hostMode == EHostMode.P2P;
             try
             {
@@ -1070,8 +988,6 @@ namespace SteamP2PFriends.Host
                 _hostMode = EHostMode.None;
                 _activeRoomRules = null;
 
-                // v0.2.3.37 P0-B-6：重置预生成标志位（Codex 第二十五次审计 §4.1 Low 项补充）
-                //   启动失败回滚后，下次开服允许 P0-B-6 重新执行
                 try
                 {
                     Patches.ItemManagerP0B6RegenerateOnLevelLoadedPatch.ResetRegenerationFlag();
@@ -1094,8 +1010,6 @@ namespace SteamP2PFriends.Host
                 SteamGameServerCallbacksWatcher.StopWatching();
                 HasCheatsGuardWatcher.StopGuard();
 
-                // v0.2.3.23 P0-C3：重置 P2PLobbyManager 状态 + 取消 pending CallResult
-                //   解决 v0.2.3.22 冒烟发现的 State=Creating 残留导致下一次开服被早返回掩盖问题
                 try
                 {
                     P2PLobbyManager.ResetForAbort();
@@ -1107,7 +1021,7 @@ namespace SteamP2PFriends.Host
 
                 if (_offlineAuthEnabled)
                 {
-                    RestoreLanOfflineAuth();
+                    RestoreListenHostOfflineAuth();
                 }
 
                 if (Provider.isConnected || Provider.isServer)
@@ -1128,10 +1042,7 @@ namespace SteamP2PFriends.Host
             }
             finally
             {
-                // v0.2.3.40 Stage 6A-1（Codex 83rd §3.2 #3 + #10）：嵌套 finally，确保 observer.Complete 与 SessionContext.Reset 都执行；
                 //   AbortHostStart 永不 arm、永不将状态写为 SaveObserved；仅 Complete("StartAbort")。
-                // v2.3 返修（Codex 78th P0-2 + 76th P0-4）：Abort 在 finally 中 End 后立即 Reset
-                // v2.2 返修（Codex 77th P0-2）：Stage6ASessionContext.Reset() 必须放入 finally
                 try
                 {
                     if (Stage6ASessionContext.IsActive)
@@ -1154,14 +1065,12 @@ namespace SteamP2PFriends.Host
             }
             finally
             {
-                // Codex 103rd 全流程接管蓝图 §5.6：Stage6B 外层 finally，仅 wasP2P 时清理
                 if (wasP2P)
                 {
                     string stage6BFailure;
                     if (!TryCleanupStage6BForExit(out stage6BFailure))
                         RoleLogger.Error("[Host]", "[Stage6B] exit cleanup failed: " + stage6BFailure);
                 }
-                // Stage 7-2-2（Codex 133rd §2.3）：P2P 退出后清理 service 运行时状态
                 //   蓝图 §4.5：仅清 _persistenceFaulted 等；不清空/不保存 SteamWhitelist.list
                 //   蓝图 §2.3：LAN 路径不得调用 service，故仅 wasP2P 时调用
                 if (wasP2P)
@@ -1171,14 +1080,12 @@ namespace SteamP2PFriends.Host
                     {
                         RoleLogger.Error("[Host]", "[P2P-WL] ResetAfterP2PExit (Abort) 异常（不阻断）: " + wlEx);
                     }
-                    // Stage 7-3 v2 §4.7：P2P 会话退出后清空待审批/UI 状态
                     try { P2PJoinApprovalService.ResetAfterSession(); }
                     catch (Exception apEx) { RoleLogger.Warn("[Host]", "[P2P-Approval] ResetAfterSession (Abort) 异常（不阻断）: " + apEx); }
                     try { P2PQuarantineAdmissionService.ResetForSession(); }
                     catch (Exception qEx) { RoleLogger.Warn("[Host]", "[P2P-Quarantine] ResetAfterSession (Abort) 异常（不阻断）: " + qEx); }
                     try { SteamPersonaDisplay.ResetAfterSession(); }
                     catch (Exception nameEx) { RoleLogger.Warn("[Host]", "[P2P-Persona] ResetAfterSession (Abort) 异常（不阻断）: " + nameEx.GetType().Name); }
-                    // Stage 10 指令 J：会话退出清理世界播报会话状态（不重复订阅）。
                     try { P2PWorldStatusBroadcaster.ResetForSession(); }
                     catch (Exception wbEx) { RoleLogger.Warn("[Host]", "[WorldBroadcast] ResetForSession (Exit) 异常（不阻断）: " + wbEx.GetType().Name); }
                 }
@@ -1187,7 +1094,6 @@ namespace SteamP2PFriends.Host
 
         public static void StopP2PServer()
         {
-            // Codex 103rd 全流程接管蓝图 §5.6：在 _hostMode=None 前捕获 wasP2P
             bool wasP2P = _hostMode == EHostMode.P2P;
             try
             {
@@ -1214,11 +1120,7 @@ namespace SteamP2PFriends.Host
                     RoleLogger.Error("[Host]", $"[ItemAuthorityGate] ResetForSession (Stop) failed: {ex.Message}");
                 }
 
-                // Stage 6A（Codex 79th §1）：Stop 真实 P2P 会话结束时 End + Reset
-                // v0.2.3.40 Stage 6A-1（Codex 83rd §3.2 #3 + #11）：嵌套 finally，Complete 必须在 Reset 之前；
                 //   reason 只能为 DisconnectCompleted；不得把 SaveObserved 写入 SessionContext。
-                // v2.3 返修（Codex 78th P0-2 + 76th P0-4）：Stop 使用 try/finally，End 后立即 Reset
-                // v2.2 返修（Codex 77th P1-1）：IsP2PServerActive = false 已在 finally 之前置 false
                 if (Stage6ASessionContext.IsActive && Stage6ASessionContext.HostMode == EHostMode.P2P)
                 {
                     try
@@ -1242,7 +1144,6 @@ namespace SteamP2PFriends.Host
                 SteamGameServerCallbacksWatcher.StopWatching();
                 HasCheatsGuardWatcher.StopGuard();
 
-                // v0.2.3.23 P0-C3：StopP2PServer 也要重置 P2PLobbyManager（与新会话开始保证一致）
                 try
                 {
                     P2PLobbyManager.ResetForAbort();
@@ -1254,7 +1155,7 @@ namespace SteamP2PFriends.Host
 
                 if (wasLan || _offlineAuthEnabled)
                 {
-                    RestoreLanOfflineAuth();
+                    RestoreListenHostOfflineAuth();
                 }
 
                 if (!Provider.isServer)
@@ -1266,10 +1167,8 @@ namespace SteamP2PFriends.Host
             {
                 RoleLogger.Error("[Host]", $"StopP2PServer 失败: {ex}");
             }
-            // v0.2.3.40 Stage 6A-1 P1-1（Codex 80th §3 P1-1）：外层 finally 兜底，
             //   即使 Stop 内任何语句（日志/状态清理/Unsubscribe）抛出，也能保证 End/Reset 执行。
             //   Reset 幂等：再次 Reset 已清空上下文无副作用。
-            // v0.2.3.40 Stage 6A-1（Codex 83rd §3.2 #3 + #11）：嵌套 finally，Complete 必须在 Reset 之前。
             finally
             {
                 if (Stage6ASessionContext.IsActive && Stage6ASessionContext.HostMode == EHostMode.P2P)
@@ -1294,14 +1193,12 @@ namespace SteamP2PFriends.Host
             }
             finally
             {
-                // Codex 103rd 全流程接管蓝图 §5.6：Stage6B 外层 finally，仅 wasP2P 时清理
                 if (wasP2P)
                 {
                     string stage6BFailure;
                     if (!TryCleanupStage6BForExit(out stage6BFailure))
                         RoleLogger.Error("[Host]", "[Stage6B] exit cleanup failed: " + stage6BFailure);
                 }
-                // Stage 7-2-2（Codex 133rd §2.3）：P2P 退出后清理 service 运行时状态
                 //   蓝图 §4.5：仅清 _persistenceFaulted 等；不清空/不保存 SteamWhitelist.list
                 //   蓝图 §2.3：LAN 路径不得调用 service，故仅 wasP2P 时调用
                 if (wasP2P)
@@ -1311,7 +1208,6 @@ namespace SteamP2PFriends.Host
                     {
                         RoleLogger.Error("[Host]", "[P2P-WL] ResetAfterP2PExit (Stop) 异常（不阻断）: " + wlEx);
                     }
-                    // Stage 7-3 v2 §4.7：P2P 会话退出后清空待审批/UI 状态
                     try { P2PJoinApprovalService.ResetAfterSession(); }
                     catch (Exception apEx) { RoleLogger.Warn("[Host]", "[P2P-Approval] ResetAfterSession (Stop) 异常（不阻断）: " + apEx); }
                     try { P2PQuarantineAdmissionService.ResetForSession(); }
@@ -1322,7 +1218,6 @@ namespace SteamP2PFriends.Host
             }
         }
 
-        // ===== Codex 103rd 全流程接管蓝图 §5.3：Stage 6B-2 internal gateway =====
 
         private static bool TryPrepareStage6BForP2PStart(LevelInfo level, out string failure)
         {
@@ -1390,7 +1285,6 @@ namespace SteamP2PFriends.Host
             }
         }
 
-        // v0.2.3.40 Stage 6A-1（Codex 84th v1.4 [指令 A]）：P2P 观察资格只读属性
         //   只读，不写状态，不反射，不访问 Provider 或 Unity 对象；
         //   LAN、单人、U3DS、启动中止、已完成 Stop 时返回 false；
         //   Prefix 和 Finalizer 以此为第一道环境隔离。
@@ -1406,11 +1300,7 @@ namespace SteamP2PFriends.Host
             }
         }
 
-        // v0.2.3.40 Stage 6A-1（Codex 83rd §3.2 #2 + #4）：观察器 arm/failure 转发方法
-        //   私有 Stage6 上下文不对 Patch 暴露；Patch 仅通过这两个内部方法间接调用观察器。
-        //   门 4：Prefix 只通过 TryArmStage6ANativeSaveObservation arm，不自行读取/修改 Stage6A 私有上下文。
         //   门 3：仅 IsP2PServerActive=true && StartSucceeded=true 后才 arm。
-        //   Codex 84th v1.4 [指令 A]：此方法保留完整条件作为第二道守门；第一道为 IsStage6ANativeSaveObservationActive。
         internal static void TryArmStage6ANativeSaveObservation()
         {
             ThreadUtil.assertIsGameThread();
@@ -1423,9 +1313,7 @@ namespace SteamP2PFriends.Host
             Stage6ASaveRoundtripObserver.ArmForNativeShutdown();
         }
 
-        // v0.2.3.40 Stage 6A-1（Codex 83rd §3.3 Finalizer）：disconnect 异常转发
         //   门 9：Finalizer 只在非空 __exception 时标失败；不吞异常、不改原版字段。
-        //   Codex 84th v1.4 [指令 B]：Finalizer 用 try/catch 包裹本方法调用，确保观察器自身异常不会替换 __exception。
         internal static void MarkStage6ANativeSaveObservationFailure(Exception exception)
         {
             ThreadUtil.assertIsGameThread();
@@ -1463,7 +1351,6 @@ namespace SteamP2PFriends.Host
             if (_listenBusy || !ShouldProcessClientHostListen()) return;
             if (!EnsureListenMethods()) return;
 
-            // v0.2.3.15 P0-D：房主 ESC 暂停状态检测（多重指示器，仅诊断不强制推进）
             try
             {
                 DetectEscPauseState();
@@ -1498,7 +1385,6 @@ namespace SteamP2PFriends.Host
                     RoleLogger.Info("[Host]",
                         $"[P2P] Host listen heartbeat mode={_hostMode} clients={Provider.clients?.Count ?? -1} pending={Provider.pending?.Count ?? -1} ticks={_listenTickCount}");
 
-                    // v0.2.2 P0-B：路由取证日志 - 输出每个 client 的 SteamID 和连接状态
                     if (Provider.clients != null && Provider.clients.Count > 0)
                     {
                         foreach (SteamPlayer sp in Provider.clients)
@@ -1541,24 +1427,19 @@ namespace SteamP2PFriends.Host
             }
         }
 
-        // ===== v0.2.3.15 P0-D：房主 ESC 暂停状态检测（多重指示器） =====
 
         /// <summary>
-        /// v0.2.3.15 P0-D：ESC 暂停状态检测器是否已启用。
         /// 供 ListenRegionSync send 日志在输出时附加 escPaused 前缀。
         /// </summary>
         public static bool EscPauseDetectorEnabled => _escPauseDetectorEnabled;
 
         /// <summary>
-        /// v0.2.3.15 P0-D：当前是否处于 ESC 暂停状态。
         /// 供 ListenRegionSync send 日志在输出时附加 escPaused=True/False 前缀。
         /// </summary>
         public static bool IsEscPausedCurrent => _lastEscPaused;
 
         /// <summary>
-        /// v0.2.3.15 P0-D：房主 ESC 暂停状态检测（多重指示器，仅诊断不强制推进）。
         ///
-        /// 审计员要求（第九次-4 审计报告 3.2 节）：
         ///   必须同时检测以下 3 项指示器，任一为真即判定为暂停：
         ///   1. LoadingUI.isBlocked（ESC 暂停时为 true，但加载期间也为 true）
         ///   2. Time.timeScale == 0（ESC 暂停的强信号）
@@ -1614,7 +1495,6 @@ namespace SteamP2PFriends.Host
         }
 
         /// <summary>
-        /// v0.2.3.15 P0-D：多重指示器 ESC 暂停判定。
         /// 任一指示器为真即判定为暂停（保守策略，避免漏检）。
         /// </summary>
         private static bool IsEscPaused()
@@ -1656,7 +1536,6 @@ namespace SteamP2PFriends.Host
         }
 
         /// <summary>
-        /// v0.2.3.15 P0-D：检测 MenuUI 暂停菜单是否激活。
         /// vanilla MenuUI.window 是 SleekWindow，暂停时某些子窗口激活。
         /// 此方法尝试多种方式检测，任一成功即返回 true。
         /// </summary>
@@ -1712,27 +1591,6 @@ namespace SteamP2PFriends.Host
             }
         }
 
-        // ---- LAN 测试模式重复 Steam ID 绕过 ----
-
-        internal static void BeginLanJoinDuplicateCheckBypass()
-        {
-            _lanJoinDuplicateCheckBypassDepth++;
-        }
-
-        internal static void EndLanJoinDuplicateCheckBypass()
-        {
-            if (_lanJoinDuplicateCheckBypassDepth > 0)
-            {
-                _lanJoinDuplicateCheckBypassDepth--;
-            }
-        }
-
-        internal static bool ShouldBypassDuplicateSteamCheck()
-        {
-            return _hostMode == EHostMode.LAN
-                && (_lanJoinDuplicateCheckBypassDepth > 0 || _isStarting || IsP2PServerActive);
-        }
-
         internal static bool ShouldProcessClientHostListen()
         {
             return IsP2PServerActive
@@ -1743,7 +1601,22 @@ namespace SteamP2PFriends.Host
                 && Level.isLoaded;
         }
 
-        private static void EnableLanOfflineAuth()
+        private static bool RequireGameThread(string operation)
+        {
+            try
+            {
+                ThreadUtil.assertIsGameThread();
+                return true;
+            }
+            catch (Exception ex)
+            {
+                RoleLogger.Error("[Host]",
+                    $"{operation} rejected: game-thread assertion failed ({ex.GetType().Name})");
+                return false;
+            }
+        }
+
+        private static void EnableListenHostOfflineAuth()
         {
             if (_offlineAuthEnabled) return;
 
@@ -1753,24 +1626,11 @@ namespace SteamP2PFriends.Host
             _restoredOfflineOnly = false;
             _offlineAuthEnabled = true;
 
-            // v0.2.3 P1-H：审计员要求保留 offlineOnly 基线，但启动时输出醒目的 INSECURE TEST-ONLY 警告。
-            // 该警告在开服时输出，明确告知本构建不安全、不能发布为正式版。
             RoleLogger.Warn("[Host]",
-                "========================================");
-            RoleLogger.Warn("[Host]",
-                "!!! INSECURE TEST-ONLY BUILD !!!");
-            RoleLogger.Warn("[Host]",
-                "!!! offlineOnly=true 已启用，跳过 Steam 票据验证 !!!");
-            RoleLogger.Warn("[Host]",
-                "!!! 本构建仅用于 Gameplay 诊断，禁止用于正式服或公开服 !!!");
-            RoleLogger.Warn("[Host]",
-                "!!! 完整 Steam auth 验证留待 P1-H 独立 auth 工作包 !!!");
-            RoleLogger.Warn("[Host]",
-                "========================================");
-            RoleLogger.Info("[Host]", "[P2P-LAN] LAN test offline auth enabled");
+                "[P2P] offlineOnly=true：listen-host Beta 暂跳过 SteamGameServer 票据校验；禁止将其作为公开服务器或正式版认证方案。");
         }
 
-        private static void RestoreLanOfflineAuth()
+        private static void RestoreListenHostOfflineAuth()
         {
             if (!_offlineAuthEnabled || _restoredOfflineOnly) return;
 
@@ -1778,7 +1638,7 @@ namespace SteamP2PFriends.Host
             offlineOnly.value = _savedOfflineOnly;
             _restoredOfflineOnly = true;
             _offlineAuthEnabled = false;
-            RoleLogger.Info("[Host]", $"[P2P-LAN] LAN test offline auth restored to {_savedOfflineOnly}");
+            RoleLogger.Info("[Host]", $"[P2P] offlineOnly restored to {_savedOfflineOnly}");
         }
 
         private static void OnPlayerConnectedToServer(SteamPlayer player)
@@ -1791,11 +1651,8 @@ namespace SteamP2PFriends.Host
                 ulong steamId = player.playerID.steamID.m_SteamID;
                 RoleLogger.Info("[Host]", $"[P2P] 检测到玩家 {playerName} 连入 (steamID={steamId})");
 
-                // Stage 7-6: atomically promote the ReadyToConnect reservation before any gameplay privilege.
-                // Stage 10 指令 A: the explicit promotion result is the join-broadcast authority
                 // (AlreadyApproved -> JoinApproved, Activated -> JoinQuarantined, Rejected* -> none).
                 QuarantinePromotionResult promotion = P2PQuarantineAdmissionService.PromoteConnected(player);
-                // Stage 10 指令 D: forward through the existing unique connect callback; do NOT
                 // add a second Provider.onEnemyConnected subscription.
                 try { P2PWorldStatusBroadcaster.OnPlayerConnected(player, promotion); }
                 catch (Exception bcEx) { RoleLogger.Warn("[Host]", $"[WorldBroadcast] connect forward failed: {bcEx.GetType().Name}"); }
@@ -1981,14 +1838,9 @@ namespace SteamP2PFriends.Host
             catch { }
         }
 
-        // ===== Stage 6A 会话上下文与诊断（Codex 79th §1 授权新增） =====
 
         /// <summary>
-        /// Stage 6A 会话上下文：单一、幂等的状态机。
-        /// Codex 75th P0-1：每个 session 最多一条 Start 和一条 End。
-        /// v2.2 返修（Codex 77th P0-1）：BeginSession 发现残留会话时抛 InvalidOperationException，
         ///   由 StartP2PServer 现有外层 catch 路由到 AbortHostStart，不在同一次调用中 Reset 后继续。
-        /// v2.1 返修（Codex 76th P0-1）：槽位单一真相源，替代 _stage6ASaveSlot。
         /// </summary>
         private static class Stage6ASessionContext
         {
@@ -2020,7 +1872,6 @@ namespace SteamP2PFriends.Host
                     throw new InvalidOperationException(
                         $"Stage6ASessionContext.BeginSession aborted: previous session {oldSessionId} not ended");
                 }
-                // v0.2.3.40 Stage 6A-1 P1-3（Codex 80th §3 P1-3）：槽位范围 fail-closed。
                 //   依据：U3-SDK Customization.FREE_CHARACTERS=1 + PRO_CHARACTERS=4 = 5 个槽位（0-4）。
                 //   非 Pro 用户只能使用槽位 0，但此处仅做硬范围校验，Pro 权限由 vanilla 兜底。
                 if (slot < 0 || slot > 4)
@@ -2064,10 +1915,6 @@ namespace SteamP2PFriends.Host
         }
 
         /// <summary>
-        /// Stage 6A 会话启动诊断（每会话最多一条）。
-        /// v2.3 返修（Codex 78th P1-1）：在 IsP2PServerActive=true 之后调用。
-        /// v2.1 返修（Codex 76th P0-5）：MarkStartSucceeded 必须先于此方法调用。
-        /// v0.2.3.40 Stage 6A-1 P1-5（Codex 80th §3 P1-5）：savedataDirectory -> savedataRoot，
         ///   新增 targetWorldDirectory=/Worlds/<serverID>，区分根目录与目标世界目录。
         /// </summary>
         private static void LogStage6ASessionStart()
@@ -2094,10 +1941,7 @@ namespace SteamP2PFriends.Host
         }
 
         /// <summary>
-        /// Stage 6A 会话退出诊断（每会话最多一条）。
-        /// v2 返修（Codex 75th P0-7）：normalExitReached 降级为 disconnectCompleted。
         /// 退出日志不得宣称"保存完成"；保存成功必须以 SaveManager.onPostSave、文件证据和再次进入后的实际状态共同裁决。
-        /// v0.2.3.40 Stage 6A-1 P1-2（Codex 80th §3 P1-2）：拆分 stopPathEntered 与 cleanupPathEntered，
         ///   stopPathEntered 仅在真实 Stop 路径为 true；cleanupPathEntered 在 Stop 或 Abort 任一清理路径均为 true。
         /// </summary>
         private static void LogStage6ASessionEnd(string reason)
@@ -2122,12 +1966,6 @@ namespace SteamP2PFriends.Host
         }
 
         /// <summary>
-        /// Stage 6A 启动检测历史 P2P_<HostSteamID> 目录（仅存在性提示）。
-        /// Codex 75th P0-9：不迁移、不复制、不删除、不覆盖。
-        /// Codex 75th P1-1：使用 ReadWrite.PATH + 真实磁盘路径，不递归枚举。
-        /// Codex 75th P1-2：文案明确"尚未导入"。
-        /// v2.1 返修（Codex 76th P0-6）：唯一位置在 Provider.serverID 设置后、PrepareClientHostSession 和 Provider.host 之前。
-        /// v0.2.3.40 Stage 6A-1 P1-4（Codex 80th §3 P1-4）：日志不再泄露完整 SteamID；
         ///   legacyServerId 使用掩码；新增 targetServerId=Singleplayer_<slot>；占位符替换为实际值。
         /// </summary>
         private static void DetectLegacyP2PSaveDirectory()

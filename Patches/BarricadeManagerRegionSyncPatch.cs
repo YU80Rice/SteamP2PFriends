@@ -8,13 +8,8 @@ using System.Reflection.Emit;
 namespace SteamP2PFriends.Patches
 {
     /// <summary>
-    /// v0.2.3.13 新增（Codex 第八次审计 P0-B + P0-C + P0-D）：
     /// BarricadeManager.onRegionUpdated step 2 远程区域同步资格 patch + SendRegion 决定性日志。
     ///
-    /// v0.2.3.13 返修（Codex v0.2.3.13 外部审计报告 P0-2 + P0-3 + P1-1）：
-    ///   - P0-2：Transpiler 改为原地修改 CodeInstruction（保留 labels/blocks）+ 使用 CodeInstruction.Calls(dedicatedGetter)。
-    ///   - P0-3：新增 OnClientDisconnected + ResetAll，按断线/新会话清除 _eligibilityLogCounts。
-    ///   - P1-1：Transpiler 和 SendRegion Prefix 增加精确 owner + patch method + exact 1/1 自检。
     ///
     /// 目标：解除 listen server 模式下"主机不向远程客机发送 Barricades RPC"的诅咒。
     /// vanilla 源码（U3-SDK BarricadeManager.cs:2886-2908）：
@@ -26,7 +21,6 @@ namespace SteamP2PFriends.Patches
     ///       }
     ///   }
     ///
-    /// 严格自检（P0-C fail-closed + P1-1 精确 owner）：
     ///   - onRegionUpdated 签名精确解析（private instance, 7 args）
     ///   - SendRegion 签名精确解析（internal instance, 6 args）
     ///   - Transpiler replacement count 必须精确等于 1
@@ -34,14 +28,12 @@ namespace SteamP2PFriends.Patches
     ///   - Transpiler owner 为 com.yu80rice.steamp2pfriends，patch method 为 BarricadeManagerRegionSyncPatch.OnRegionUpdated_Transpiler，count=1
     ///   - SendRegion Prefix owner 为 com.yu80rice.steamp2pfriends，patch method 为 BarricadeManagerRegionSyncPatch.SendRegion_Prefix，count=1
     ///
-    /// 严格禁止（P0-E）：
     ///   - 不全局伪造 Dedicator.IsDedicatedServer
     ///   - 不修改 BarricadeManager.onLevelLoaded 中的 if (Provider.isServer) load() 守卫
     ///   - 不引入自定义 RPC（继续使用原生 SendRegion / ReceiveMultipleBarricades）
     /// </summary>
     public static class BarricadeManagerRegionSyncPatch
     {
-        // P0-C：手动登记状态
         public static bool AllRegistrationsSucceeded { get; private set; }
         public static string RegistrationSummary { get; private set; } = "未登记";
         public static int ReplacementCount { get; private set; } = -1;
@@ -49,13 +41,11 @@ namespace SteamP2PFriends.Patches
         public static string SignatureSummary { get; private set; } = "未自检";
         public static bool SendRegionPrefixRegistered { get; private set; }
 
-        // P1-1：精确 owner 自检状态
         public static bool TranspilerOwnerVerified { get; private set; }
         public static bool PrefixOwnerVerified { get; private set; }
         public static string TranspilerOwnerSummary { get; private set; } = "未自检";
         public static string PrefixOwnerSummary { get; private set; } = "未自检";
 
-        // P0-D：决定性日志限次（每个玩家前 5 次资格判定输出一次）
         private const int EligibilityLogLimit = 5;
         private static readonly Dictionary<ulong, int> _eligibilityLogCounts = new Dictionary<ulong, int>();
 
@@ -66,7 +56,6 @@ namespace SteamP2PFriends.Patches
         private const string PatchSendRegionPrefixName = nameof(SendRegion_Prefix);
 
         /// <summary>
-        /// 手动登记两个 patch（P0-C fail-closed + P1-1 精确 owner）。
         /// </summary>
         public static bool RegisterManual(Harmony harmony)
         {
@@ -80,7 +69,6 @@ namespace SteamP2PFriends.Patches
                 return false;
             }
 
-            // P0-C step 1：自检 onRegionUpdated 签名
             bool sigOk = VerifyTargetSignature();
             if (!sigOk)
             {
@@ -90,7 +78,6 @@ namespace SteamP2PFriends.Patches
                 return false;
             }
 
-            // P0-C step 2：登记 Transpiler
             bool transpilerOk = RegisterTranspiler(harmony);
             if (!transpilerOk)
             {
@@ -100,7 +87,6 @@ namespace SteamP2PFriends.Patches
                 return false;
             }
 
-            // P0-C step 3：登记 SendRegion Prefix
             bool prefixOk = RegisterSendRegionPrefix(harmony);
             SendRegionPrefixRegistered = prefixOk;
             if (!prefixOk)
@@ -146,7 +132,6 @@ namespace SteamP2PFriends.Patches
                     return false;
                 }
 
-                // P1-1：精确 owner 自检
                 bool ownerOk = VerifyPatchOwner(original, isTranspiler: true);
                 if (!ownerOk)
                 {
@@ -187,7 +172,6 @@ namespace SteamP2PFriends.Patches
 
                 harmony.Patch(original, prefix: new HarmonyMethod(prefix));
 
-                // P1-1：精确 owner 自检
                 bool ownerOk = VerifyPatchOwner(original, isTranspiler: false);
                 if (!ownerOk)
                 {
@@ -208,7 +192,6 @@ namespace SteamP2PFriends.Patches
         }
 
         /// <summary>
-        /// P1-1：精确 owner + patch method + exact 1/1 自检。
         /// 验证目标方法上 owner=com.yu80rice.steamp2pfriends 的 patch 精确为 1 个，
         /// 且 patch method 的 DeclaringType 和 Name 与本类期望一致。
         /// </summary>
@@ -308,7 +291,6 @@ namespace SteamP2PFriends.Patches
         }
 
         /// <summary>
-        /// P0-C：自检 onRegionUpdated 签名。
         /// 期望：private instance method，7 个参数 (Player, byte, byte, byte, byte, byte, ref bool)
         /// </summary>
         private static bool VerifyTargetSignature()
@@ -392,11 +374,9 @@ namespace SteamP2PFriends.Patches
         }
 
         /// <summary>
-        /// P0-B + P0-2 返修：Transpiler 主实现。
         /// 替换 vanilla onRegionUpdated 中的 Dedicator.get_IsDedicatedServer() 调用
         /// 为 ListenRegionSyncEligibility.IsDedicatedOrP2PRemoteRecipient(player)。
         ///
-        /// v0.2.3.13 返修（Codex P0-2）：
         ///   - 改用 CodeInstruction.Calls(dedicatedGetter) 替代 ReferenceEquals（不依赖 MethodInfo 对象引用）
         ///   - 原地修改 codes[i].opcode/operand（保留 labels/blocks），避免未来游戏更新或 Harmony 组合 patch 后控制流元数据被破坏
         ///
@@ -438,10 +418,8 @@ namespace SteamP2PFriends.Patches
                 CodeInstruction instr = codes[i];
                 if (instr == null) continue;
 
-                // P0-2 返修：使用 CodeInstruction.Calls(dedicatedGetter)
                 if (instr.Calls(dedicatedGetter))
                 {
-                    // P0-2 返修：原地修改 opcode/operand，保留 labels/blocks
                     instr.opcode = OpCodes.Ldarg_1;
                     instr.operand = null;
                     codes.Insert(i + 1, new CodeInstruction(OpCodes.Call, eligibilityMethod));
@@ -464,7 +442,6 @@ namespace SteamP2PFriends.Patches
         }
 
         /// <summary>
-        /// v0.2.3.13 P0-D：SendRegion Prefix 决定性日志。
         /// 仅记录日志，不影响原方法行为（不返回 false，不修改参数）。
         /// 形成完整链路证据：主机 eligible/send -> ClientMethod remote attempt/send-success -> 客机 Receive。
         /// </summary>
@@ -474,7 +451,6 @@ namespace SteamP2PFriends.Patches
         {
             if (client == null) return;
 
-            // v0.2.3.13 NRE 修复：SteamPlayerID 重载 != 但未判空，用 ?. 绕开
             ulong steamId = client.playerID?.steamID.m_SteamID ?? 0UL;
             if (steamId == 0UL) return;
 
@@ -492,7 +468,6 @@ namespace SteamP2PFriends.Patches
                 ? client.transportConnection.GetType().Name
                 : "null";
 
-            // v0.2.3.15 P0-D：send 日志附加 escPaused 前缀（供外部审计定位 RegionSync 延迟根因）
             string escPrefix = SteamP2PFriends.Host.HostManager.EscPauseDetectorEnabled
                 ? $"escPaused={SteamP2PFriends.Host.HostManager.IsEscPausedCurrent} "
                 : "";
@@ -503,14 +478,12 @@ namespace SteamP2PFriends.Patches
         }
 
         /// <summary>
-        /// v0.2.3.13 返修 P0-3：Provider.onClientDisconnected 回调。
         /// 断线时清除已不在 Provider.clients 中的 SteamID 计数，避免同一 SteamID 重连后丢失诊断日志。
         /// </summary>
         public static void OnClientDisconnected()
         {
             try
             {
-                // v0.2.3.13 NRE 修复：Provider.clients 在 shutdown 期间可能为 null
                 if (Provider.clients == null) return;
 
                 var activeSteamIds = new HashSet<ulong>();
@@ -518,7 +491,6 @@ namespace SteamP2PFriends.Patches
                 {
                     if (sp == null) continue;
 
-                    // v0.2.3.13 NRE 修复：SteamPlayerID 重载 != 但未判空，用 ?. 绕开
                     ulong steamId = sp.playerID?.steamID.m_SteamID ?? 0UL;
                     if (steamId != 0UL)
                     {
@@ -553,7 +525,6 @@ namespace SteamP2PFriends.Patches
         }
 
         /// <summary>
-        /// v0.2.3.13 返修 P0-3：开新服/停服时清除所有计数。
         /// 由 HostManager.StartP2PServer / Plugin.OnDestroy 调用。
         /// </summary>
         public static void ResetAll()

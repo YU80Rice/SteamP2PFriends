@@ -7,7 +7,6 @@ using UnityEngine;
 namespace SteamP2PFriends.Patches
 {
     /// <summary>
-    /// v0.2.3.19 D-Vis-11 诊断 patch（LoadingUI.Update - 加载阻塞追踪）。
     ///
     /// 审计强制修正 2：D-Vis-11 改为 Patch LoadingUI.Update。
     ///

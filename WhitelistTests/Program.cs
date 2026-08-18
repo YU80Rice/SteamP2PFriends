@@ -140,6 +140,13 @@ namespace SteamP2PFriends.WhitelistTests
             RunTest("H9. Stage92_QueryPortPostfix_RealHarmonyActivation", HarmonyMetadataTests.Test_H9_Stage92QueryPortPostfixActivates, ref total, ref passed, ref failed);
             RunTest("H10. Stage10_DeathCommit_RealHarmonyActivation", HarmonyMetadataTests.Test_H10_Stage10DeathCommitPatchActivates, ref total, ref passed, ref failed);
             RunTest("H11. Stage10_Avatar_RealHarmonyActivation", HarmonyMetadataTests.Test_H11_Stage10AvatarPatchActivates, ref total, ref passed, ref failed);
+            RunTest("H12. Compat_ObserverPatch_DoesNotBlock", HarmonyCompatibilityAuditTests.Test_ObserverPatch_IsRecordedWithoutBlocking, ref total, ref passed, ref failed);
+            RunTest("H13. Compat_ForeignTranspiler_Blocks", HarmonyCompatibilityAuditTests.Test_ForeignTranspiler_OnOwnTranspiledTarget_Blocks, ref total, ref passed, ref failed);
+            RunTest("H14. Compat_P2PTransportTargets_RemainExclusive", HarmonyCompatibilityAuditTests.Test_P2PTransportTargets_RemainExclusive, ref total, ref passed, ref failed);
+            RunTest("LOG1. LegacyDiagnosticMarkersAreClassified", LoggingPolicyTests.Test_LegacyDiagnosticMarkersAreClassified, ref total, ref passed, ref failed);
+            RunTest("LOG2. VerboseToggleIsAtomicAndDefaultsOff", LoggingPolicyTests.Test_VerboseToggleIsAtomicAndDefaultsOff, ref total, ref passed, ref failed);
+            RunTest("LOG3. LegacyLabelsAreRemovedAtOutputBoundary", LoggingPolicyTests.Test_LegacyLabelsAreRemovedAtOutputBoundary, ref total, ref passed, ref failed);
+            RunTest("LOG4. InternalDiagnosticTagsAreRemovedFromOperationalText", LoggingPolicyTests.Test_InternalDiagnosticTagsAreRemovedFromOperationalText, ref total, ref passed, ref failed);
 
             Console.WriteLine();
             Console.WriteLine("--- Alpha-1 Authoritative Natural Item Generation Gate ---");

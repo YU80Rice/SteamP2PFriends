@@ -9,17 +9,14 @@ using HarmonyLib;
 namespace SteamP2PFriends.Patches
 {
     /// <summary>
-    /// v0.2.3.27 P0-A 决定性诊断核心（Codex 第 7 节 P0-A）：
     /// 为 Item/Zombie/Vehicle/Animal/Object/Resource 六条世界同步链路提供
     /// 统一的限频、脱敏、重置基础设施。
     ///
-    /// v0.2.3.27-P0-A 返修（Codex 静态审计 NO-GO 修正）：
     ///   - OnClientDisconnected 字典枚举与删除同锁
     ///   - 新增 RegisterSessionResetCallback / ResetForNewSession：第二局开服时清空所有计数 +
     ///     调用各 patch 注册的计时重置回调（_lastUpdateLogTime = -100f）
     ///   - TryAcquirePlayerQuota 真实使用引导：onRegionUpdated/onBoundUpdated 必须使用此方法
     ///
-    /// 严格 diag-only（Codex P0-A 硬门槛）：
     ///   - 不改变方法返回值、参数、连接列表、writer 或 isNetworked
     ///   - 不增加任何 tc.Send、InvokeLoopback 或自定义 RPC
     ///   - 不改变 dedicated/listen 条件
@@ -62,6 +59,8 @@ namespace SteamP2PFriends.Patches
         public static bool TryAcquireQuota(string pointId, out int currentCount)
         {
             currentCount = 0;
+            if (!PluginLogPolicy.IsVerboseDiagnosticsEnabled) return false;
+
             try
             {
                 lock (_lock)
@@ -96,6 +95,8 @@ namespace SteamP2PFriends.Patches
         public static bool TryAcquirePlayerQuota(ulong steamId, string pointId, int perPlayerLimit, out int currentCount)
         {
             currentCount = 0;
+            if (!PluginLogPolicy.IsVerboseDiagnosticsEnabled) return false;
+
             try
             {
                 if (steamId == 0UL)
@@ -154,11 +155,11 @@ namespace SteamP2PFriends.Patches
         }
 
         /// <summary>
-        /// v0.2.3.27-P0-A 返修：断线时清除已不在 Provider.clients 中的玩家计数。
-        /// 字典枚举与删除必须置于同一 _lock 中（Codex P1-1）。
         /// </summary>
         public static void OnClientDisconnected()
         {
+            if (!PluginLogPolicy.IsVerboseDiagnosticsEnabled) return;
+
             try
             {
                 if (Provider.clients == null) return;
@@ -202,7 +203,7 @@ namespace SteamP2PFriends.Patches
 
                 if (keysToRemove.Count > 0)
                 {
-                    RoleLogger.Info("[Shared]",
+                    RoleLogger.Diagnostic("[Shared]",
                         $"[WorldSyncDiag] OnClientDisconnected 清除断线玩家计数 ({keysToRemove.Count} 条)");
                 }
             }
@@ -213,7 +214,6 @@ namespace SteamP2PFriends.Patches
         }
 
         /// <summary>
-        /// v0.2.3.27-P0-A 返修：开新服/停服时清除所有计数 + 调用各 patch 注册的计时重置回调。
         /// 由 HostManager.StartP2PServer / Plugin.OnDestroy 调用。
         /// </summary>
         public static void ResetAll()
@@ -239,7 +239,7 @@ namespace SteamP2PFriends.Patches
                     try { cb(); } catch { }
                 }
 
-                RoleLogger.Info("[Shared]",
+                RoleLogger.Diagnostic("[Shared]",
                     $"[WorldSyncDiag] ResetAll 清空所有计数 (points={pointCleared} playerPoints={playerCleared} sessionTotal=0 resetCallbacks={callbackCount})");
             }
             catch (System.Exception ex)
@@ -260,12 +260,10 @@ namespace SteamP2PFriends.Patches
         }
 
         /// <summary>
-        /// v0.2.3.27-P0-A 返修（Codex TC-S6）：精确 Patch MethodInfo 身份验证。
         /// 不再统计同 owner 数量（InitialStateReceiveDiagnosticPatch 等其他 patch 会使
         /// ReceiveMultipleVehicles 等 owner 计数 &gt;=2），改为检查
         /// "我们自己的 Prefix/Postfix MethodInfo 是否在 patches 列表中"。
         ///
-        /// v0.2.3.27-P0-A 冒烟中止返修（Codex P0-R7）：新增 logWhenMissing 参数，
         /// 将"查询身份"与"报告验证失败"拆开。
         ///   - logWhenMissing=false：登记前预检查使用，缺失是预期状态（待登记），不输出 Error
         ///   - logWhenMissing=true（默认）：登记后验证/最终 VerifyRegistration 使用，缺失才输出 Error
@@ -339,18 +337,13 @@ namespace SteamP2PFriends.Patches
         }
 
         /// <summary>
-        /// v0.2.3.27-P0-A 手动登记（Codex 外部审计裁决 P0-R1～R6）：
         /// identity-based 幂等登记。检查"同一 original + 同一 owner + 同一 Patch MethodInfo + 同一 Prefix/Postfix 类型"
         /// 是否已存在：
         ///   - 已存在：记录 SKIP already registered，返回 true（幂等）
         ///   - 不存在：执行 harmony.Patch，然后立即用相同 identity 再验证一次
         ///
-        /// P0-R1：参数类型必须完整指定，包括 in ClientInvocationContext -&gt; MakeByRefType()，
         ///        ref bool -&gt; typeof(bool).MakeByRefType()，所有重载必须区分。
-        /// P0-R2：identity-based 幂等，不使用"只要该目标上存在任何 Prefix/Postfix 就跳过"模式，
         ///        以免 InitialStateReceiveDiagnosticPatch 等其他同 owner patch 误判。
-        /// P0-R3：每个 hook 独立 try/catch，一个失败不阻止其他。
-        /// P0-R4：Prefix/Postfix 分别核验，不互相替代。
         /// </summary>
         public static bool RegisterIdentityPatch(
             Harmony harmony,
@@ -380,7 +373,6 @@ namespace SteamP2PFriends.Patches
                     return false;
                 }
 
-                // P0-R1：完整参数类型解析
                 MethodInfo original = targetParamTypes != null
                     ? AccessTools.Method(targetType, targetMethodName, targetParamTypes)
                     : AccessTools.Method(targetType, targetMethodName);
@@ -391,12 +383,10 @@ namespace SteamP2PFriends.Patches
                     return false;
                 }
 
-                // P0-R1：记录目标的 DeclaringType、Name、返回类型和完整参数类型
                 string paramSig = FormatParameterSignature(original);
                 RoleLogger.Info("[Shared]",
                     $"{tag} resolved original: {original.DeclaringType.Name}.{original.Name} returnType={original.ReturnType.Name} params=[{paramSig}]");
 
-                // P0-R2 + P0-R7：identity-based 登记前检查（静默，缺失是预期状态，不输出 Error）
                 bool alreadyRegistered = IsPatchRegistered(targetType, targetMethodName, patchMethod, patchType, targetParamTypes, logWhenMissing: false);
                 if (alreadyRegistered)
                 {
@@ -423,7 +413,6 @@ namespace SteamP2PFriends.Patches
                     return false;
                 }
 
-                // P0-R2 + P0-R7：登记后立即用相同 identity 再验证一次（此时缺失才是错误，输出 Error）
                 bool verified = IsPatchRegistered(targetType, targetMethodName, patchMethod, patchType, targetParamTypes, logWhenMissing: true);
                 if (!verified)
                 {

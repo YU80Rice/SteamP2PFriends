@@ -6,9 +6,7 @@ using System.Reflection;
 namespace SteamP2PFriends.Patches
 {
     /// <summary>
-    /// v0.2.3.20 D-Vis-17 诊断 patch（PlayerLifecycleDesc.ready 状态追踪 - 替代方案）。
     ///
-    /// 审计授权：外部审计报告-第十三次双机测试-v0.2.3.19-修订版验收 §9.2 授权实施。
     ///
     /// 审计要求（§9.1 修正 4 + §5.3）：
     ///   - 追踪客机端 PlayerLifecycleDesc.ready 状态变化
@@ -251,7 +249,6 @@ namespace SteamP2PFriends.Patches
         }
 
         /// <summary>
-        /// v0.2.3.20：卸载时反订阅 onPlayerCreated 事件。
         /// </summary>
         public static void Shutdown()
         {

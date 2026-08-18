@@ -5,19 +5,15 @@ using System.Reflection;
 namespace SteamP2PFriends.Patches.P0EBarricadeLifecycle
 {
     /// <summary>
-    /// v0.2.3.39 5B-1B v2.5（Codex 第五十九次审计 🟢 放行编码）：
     /// Barricade equip/checkClaims Transpiler 的 owner + priority + exact count 自检。
     ///
-    /// 设计依据：.audit/v0.2.3.39-stage5B-1B-v2.5-design-20260727/barricade-fix-design-v2.5-20260727.md §4 + §8
     ///
-    /// count-based 裁决（v2.4 §4.2 + v2.5 §6 VerifyAll）：
     ///   - exact == 1            （本插件精确 Transpiler 出现 1 次）
     ///   - priorityMatch == 1    （本插件精确 Transpiler + Priority.Normal 出现 1 次）
     ///   - ownerMatch == 1       （本 owner 在此方法上仅 1 个 Transpiler，无同 owner 其他 Transpiler 共存）
     ///   - duplicateExpected == false （exact 不超过 1，无重复登记）
     ///   - noForeign             （无外部 owner Transpiler）
     ///
-    /// C4 硬约束（Codex 59th §2.4）：
     ///   foreign Transpiler 触发 fail-closed 时，日志写 action=will_rollback_this_plugin_patches，
     ///   不能在 VerifyAll 阶段提前声称已经完成回滚。真正的 rollbackClean 结果由随后 RollbackBoth 日志输出。
     /// </summary>
@@ -108,7 +104,6 @@ namespace SteamP2PFriends.Patches.P0EBarricadeLifecycle
                     $"foreignMethod={firstForeignMethod ?? "<none>"} " +
                     $"total={patches.Count}";
 
-                // v2.5 §8 + C4：foreign 触发时明确标为 COMPATIBILITY_GUARD + "will_rollback"
                 if (!noForeign)
                 {
                     RoleLogger.Error("[Shared]",

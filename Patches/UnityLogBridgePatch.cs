@@ -5,14 +5,12 @@ using UnityEngine;
 namespace SteamP2PFriends.Patches
 {
     /// <summary>
-    /// v0.2.3.2 D-11 Unity 日志桥接（升级为阻断项，审计 v2 §6.2 放行条件 5）。
     ///
     /// v2 审计要求：
     ///   - D-11 应列为阻断项。第四次测试前在客机端 Plugin.Awake 注册
     ///     Application.logMessageReceivedThreaded 钩子。
     ///   - 把 Unity 引擎层 NRE 转发到 BepInEx 日志，并标记 [Client-UnityBridge] 前缀。
     ///
-    /// v0.2.3.2 修正：
     ///   1. 从 Application.logMessageReceived 升级为 Application.logMessageReceivedThreaded
     ///      （线程安全版本，可在任何线程触发，包括 Unity 主线程之外的 NRE）。
     ///   2. 提供静态 IsSubscribed 属性供 Plugin.VerifyCriticalPatches 验证。
@@ -62,7 +60,6 @@ namespace SteamP2PFriends.Patches
         }
 
         /// <summary>
-        /// v0.2.3.2 D-11 阻断项：订阅状态供 Plugin.VerifyCriticalPatches 验证。
         /// 订阅失败时返回 false，触发 DIAGNOSTIC BUILD INVALID。
         /// </summary>
         public static bool IsSubscribed => _subscribed;

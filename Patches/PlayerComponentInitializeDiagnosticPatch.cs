@@ -6,9 +6,7 @@ using System.Collections.Generic;
 namespace SteamP2PFriends.Patches
 {
     /// <summary>
-    /// v0.2.3.2 P0-D D-3b：各组件 InitializePlayer Prefix+Finalizer 诊断 patch。
     ///
-    /// v0.2.3.2 P0-3 修复（Codex 第三次审计）：
     ///   - 补齐 PlayerVoice / PlayerWorkzone 组件（vanilla Player.InitializePlayer 内部调用 15 个子组件）。
     ///   - 补齐 Player.InitializePlayerStart（private，Player.cs:1542，InitializePlayer 第一个调用）。
     ///   - SteamID 提取改为 cast __instance 为 PlayerCaller 后访问公开 player 属性
@@ -192,7 +190,6 @@ namespace SteamP2PFriends.Patches
 
         // ===== 辅助方法 =====
         /// <summary>
-        /// P0-3 修复：cast __instance 为 PlayerCaller 后访问公开 player 属性。
         /// 真实字段是 protected Player _player（PlayerCaller.cs:9），公开属性是 player => _player（:10）。
         /// 旧实现反射查 "player" 字段会返回 null（因为 player 是属性不是字段）。
         /// </summary>

@@ -8,7 +8,6 @@ using System.Reflection;
 namespace SteamP2PFriends.Patches
 {
     /// <summary>
-    /// v0.2.3.19 D-Vis-13 诊断 patch（Player.InitializePlayer 阶段标记 - 初始化耗时追踪）。
     ///
     /// 目标：追踪 Player.InitializePlayer 各阶段耗时，定位"卡在哪一步"。
     ///

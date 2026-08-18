@@ -18,7 +18,6 @@ namespace SteamP2PFriends.Host
     }
 
     /// <summary>
-    /// Stage 10 指令 A: explicit result of a connected-player promotion. Produced inside
     /// quarantine by the real transaction outcome; callers must not guess state via IsKnown.
     /// Only AlreadyApproved and Activated may trigger the corresponding join broadcast; both
     /// Rejected* results must never broadcast "joined" before the kick.
@@ -69,7 +68,6 @@ namespace SteamP2PFriends.Host
     }
 
     /// <summary>
-    /// Stage 7-6 server-authoritative admission quarantine.
     /// Unknown P2P guests receive a one-connection permit at ReadyToConnect, then are blocked
     /// after fully joining until the host persists approval or the 30 second deadline expires.
     /// </summary>
@@ -196,7 +194,6 @@ namespace SteamP2PFriends.Host
         }
 
         /// <summary>
-        /// Stage 10 指令 A: promotes a connected player and returns the explicit transaction
         /// result. Only AlreadyApproved and Activated may trigger the join broadcast; the two
         /// Rejected* results must never broadcast "joined" before the kick.
         /// </summary>
@@ -391,7 +388,6 @@ namespace SteamP2PFriends.Host
                     SteamPlayer player = FindClient(id);
                     if (player != null) SetSignal(player, false);
                 }
-                // Stage 10 指令 C: write the expected-departure marker + broadcast BEFORE the Kick,
                 // so the subsequent onEnemyDisconnected consumes the marker and does NOT add a
                 // second ordinary "left" message. A broadcaster exception must not block the Kick.
                 try

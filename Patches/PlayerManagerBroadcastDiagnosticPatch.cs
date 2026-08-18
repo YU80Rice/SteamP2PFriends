@@ -12,11 +12,9 @@ using UnityEngine;
 namespace SteamP2PFriends.Patches
 {
     /// <summary>
-    /// v0.2.3.22 P1-S5 修复（外部审计报告-Codex §5 + v0.2.3.21 单机冒烟前静态外部审计返修 High-2）。
     ///
     /// 补全真正的发送端诊断，替换 D-Vis-15 的主要用途。
     ///
-    /// v0.2.3.22 High-2 修复：
     ///   - sendPlayerStates 改为 Prefix + Postfix + Finalizer 三 Hook
     ///   - Prefix 采集广播前快照（seq-before、房主 updates、远程 updates、玩家数和 transport）
     ///   - Postfix 采集广播后快照（seq-after、队列是否按预期清零）
@@ -30,7 +28,6 @@ namespace SteamP2PFriends.Patches
     ///   4. PlayerManager.sendPlayerStates Finalizer：原方法异常捕获
     ///   5. 客机 PlayerManager.ReceivePlayerStates Postfix：包 seq、调用次数（节流）
     ///
-    /// 审计授权：外部审计报告-Codex §5 P1-S5 + v0.2.3.21 单机冒烟前静态外部审计返修 High-2。
     ///
     /// 严格禁止（审计 §8）：
     ///   - 把 SendMessageToClient Postfix 返回称为网络投递成功（D-Vis-16 文案已改）
@@ -41,7 +38,6 @@ namespace SteamP2PFriends.Patches
     {
         private const string HarmonyId = SteamP2PFriendsPlugin.HARMONY_ID;
 
-        // v0.2.3.22 High-2: 三 Hook 分别登记状态
         public static bool UpdatePostfixRegistered { get; private set; }
         public static bool SendPrefixRegistered { get; private set; }
         public static bool SendPostfixRegistered { get; private set; }
@@ -61,7 +57,6 @@ namespace SteamP2PFriends.Patches
         private static float _lastGateSnapshotTime;
         private const float GateSnapshotInterval = 1.0f;
 
-        // v0.2.3.22 High-2: sendPlayerStates 日志节流
         private const int FirstNVerbose = 10;
         private static long _verboseLoggedCount;
         private static float _lastSendAggregateTime;
@@ -75,7 +70,6 @@ namespace SteamP2PFriends.Patches
         private static long _aggregateHostUpdatesTotal;
         private static long _aggregateRemoteUpdatesTotal;
 
-        // v0.2.3.22 High-2: ReceivePlayerStates 节流
         private const int FirstNReceiveVerbose = 10;
         private static long _receiveVerboseLoggedCount;
         private static float _lastReceiveAggregateTime;
@@ -89,7 +83,6 @@ namespace SteamP2PFriends.Patches
         private static FieldInfo _lastTickField;
         private static bool _reflectionCached;
 
-        // v0.2.3.22 High-2: Prefix -> Postfix/Finalizer 传递的快照
         private class SendSnapshot
         {
             public uint SeqBefore;
@@ -310,7 +303,6 @@ namespace SteamP2PFriends.Patches
         private static class Hooks
         {
             /// <summary>
-            /// P1-S5: PlayerManager.Update Postfix。
             /// 每秒聚合一次 gate 状态与是否跨过发送节拍。
             /// </summary>
             internal static void UpdatePostfix(PlayerManager __instance)
@@ -352,7 +344,6 @@ namespace SteamP2PFriends.Patches
             }
 
             /// <summary>
-            /// P1-S5: PlayerManager.sendPlayerStates Prefix（v0.2.3.22 High-2）。
             /// 采集广播前快照：seq-before、房主 updates、远程 updates、玩家数和 transport。
             /// 快照存入 _currentSnapshot 供 Postfix/Finalizer 读取。
             /// </summary>
@@ -455,7 +446,6 @@ namespace SteamP2PFriends.Patches
             }
 
             /// <summary>
-            /// P1-S5: PlayerManager.sendPlayerStates Postfix（v0.2.3.22 High-2）。
             /// 采集广播后快照：seq-after、队列是否按预期清零。
             /// 原版 sendPlayerStates 返回前会清空所有玩家 movement.updates，因此 Postfix 中应全部为 0。
             /// </summary>
@@ -561,7 +551,6 @@ namespace SteamP2PFriends.Patches
             }
 
             /// <summary>
-            /// P1-S5: PlayerManager.sendPlayerStates Finalizer（v0.2.3.22 High-2）。
             /// 捕获原方法异常，防止 Postfix 未执行时误呈现为"未调用"。
             /// </summary>
             internal static System.Exception SendPlayerStatesFinalizer(System.Exception __exception)
@@ -587,7 +576,6 @@ namespace SteamP2PFriends.Patches
             }
 
             /// <summary>
-            /// P1-S5: PlayerManager.ReceivePlayerStates Postfix（客机端，v0.2.3.22 High-2 节流）。
             /// 记录包 seq、调用次数。
             /// </summary>
             internal static void ReceivePlayerStatesPostfix(in ClientInvocationContext context)

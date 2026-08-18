@@ -9,14 +9,7 @@ using UnityEngine;
 namespace SteamP2PFriends.Patches.P0EDiagnostic
 {
     /// <summary>
-    /// v0.2.3.38 P0-E-2 阶段 2 诊断补丁（Codex 阶段 2 外部审计 P0-R1~R7 返修版）：
     ///
-    /// v0.2.3.38 阶段 2 第一版被 Codex 外部审计 NO-GO，7 项 Findings：
-    ///   P0-R1: 多重 __state_x 参数无效，Harmony 仅识别单一 __state
-    ///   P0-R3: isBusy 不存在（应读 player.equipment.isBusy），isUseable 是属性非字段
-    ///   P0-R4: 实施报告所称 identity 自检未实现（仅 PlayerManagerCullingDiagnosticPatch 实现）
-    ///   P0-R5: sessionId 从未变化，跨会话诊断无法关联
-    ///   P1-R7: 缺少 build/dropBarricade 权威创建点 Hook
     ///
     /// 返修后 8 个诊断点（DP-1..DP-8）：
     ///   DP-1 startPrimary Prefix+Postfix：struct __state（isBusy/isValid/wasAsked/instanceId）
@@ -25,8 +18,6 @@ namespace SteamP2PFriends.Patches.P0EDiagnostic
     ///   DP-4 checkClaims Postfix：__result
     ///   DP-5 ReceiveBarricadeNone Prefix+Postfix：struct __state（wasAskedBefore/instanceId）
     ///   DP-6 simulate Postfix：isUsing/isUseable（属性反射）/isBusy（player.equipment.isBusy 直读）
-    ///   DP-7 build Prefix+Postfix（新增 P1-R7）：struct __state（isUsing/isBuilding/startedUse/instanceId）
-    ///   DP-8 BarricadeManager.dropBarricade Prefix+Postfix（新增 P1-R7）：asset.id/hit.name/point/owner/__result null
     ///
     /// 严格约束（零副作用）：
     ///   - 仅 Prefix/Postfix，禁止 Transpiler
@@ -34,8 +25,6 @@ namespace SteamP2PFriends.Patches.P0EDiagnostic
     ///   - 仅读取原版实际调用的 __result 与字段
     ///   - 反射启动时一次性缓存，失败 fail-closed（DiagnosticBuildValid=false）
     ///
-    /// owner 自检（P0-R4）：所有 DP 使用 WorldSyncDiagnosticCore.RegisterIdentityPatch
-    /// 会话重置（P0-R5）：静态构造注册 RegisterSessionResetCallback，递增 _sessionId + 清空节流缓存
     /// SteamID 脱敏：使用 DiagnosticMaskUtil.MaskSteamId
     /// </summary>
     public static class UseableBarricadeDiagnosticPatch
@@ -48,9 +37,7 @@ namespace SteamP2PFriends.Patches.P0EDiagnostic
         public static bool DP3_CheckSpace_Registered { get; private set; }
         public static bool DP4_CheckClaims_Registered { get; private set; }
         public static bool DP5_ReceiveBarricadeNone_Registered { get; private set; }
-        // v0.2.3.39 5B-0（Codex 第四十二次审计 §5 授权）：DP-5 Finalizer 异常诊断
         public static bool DP5_Finalizer_Registered { get; private set; }
-        // v0.2.3.39 F1（Codex 第四十三次审计 §3 P0-F1 返修）：DP-5 Finalizer owner 精确自检
         // 登记成功不等于 owner 精确自检成功；任一失败都 fail-closed
         public static bool DP5_Finalizer_OwnerVerified { get; private set; }
         public static string DP5_Finalizer_OwnerSummary { get; private set; } = "<unverified>";
@@ -64,7 +51,6 @@ namespace SteamP2PFriends.Patches.P0EDiagnostic
             && DP5_Finalizer_Registered && DP5_Finalizer_OwnerVerified
             && DP6_Simulate_Registered && DP7_Build_Registered && DP8_DropBarricade_Registered;
 
-        // ===== Reflection cache (P0-R3) =====
         private static FieldInfo _isValidField;
         private static FieldInfo _wasAskedField;
         private static FieldInfo _isUsingField;
@@ -73,7 +59,6 @@ namespace SteamP2PFriends.Patches.P0EDiagnostic
         private static FieldInfo _pendingBuildHandleField;
         private static FieldInfo _hitField;
         private static PropertyInfo _isUseableProperty;
-        // v0.2.3.39 5B-1A（Codex 第四十六次审计 §6 授权）：私有 help 字段启动时一次性缓存
         // 用于 Finalizer 异常快照确认 Listen Host 远端实例 help=null 候选（L553 boundsRotation = help.rotation）
         private static FieldInfo _helpField;
         private static bool _reflectionCached;
@@ -90,7 +75,6 @@ namespace SteamP2PFriends.Patches.P0EDiagnostic
         private static long _dp7EventCount;
         private static long _dp8EventCount;
 
-        // ===== Session state (P0-R5) =====
         private static int _sessionId = 0;
         public static int CurrentSessionId => _sessionId;
 
@@ -112,7 +96,6 @@ namespace SteamP2PFriends.Patches.P0EDiagnostic
                 $"{Label} RESET oldSession={oldSession} newSession={_sessionId} reason=WorldSyncDiagnosticCore.ResetAll");
         }
 
-        // ===== Reflection caching (P0-R3: fail-closed) =====
         private static void CacheReflection()
         {
             if (_reflectionCached) return;
@@ -127,7 +110,6 @@ namespace SteamP2PFriends.Patches.P0EDiagnostic
                 _pendingBuildHandleField = AccessTools.Field(typeof(UseableBarricade), "pendingBuildHandle");
                 _hitField = AccessTools.Field(typeof(UseableBarricade), "hit");
                 _isUseableProperty = AccessTools.Property(typeof(UseableBarricade), "isUseable");
-                // v0.2.3.39 5B-1A（Codex 第四十六次审计 §6）：私有 help 字段一次性缓存
                 _helpField = AccessTools.Field(typeof(UseableBarricade), "help");
 
                 if (_isValidField == null || _wasAskedField == null || _isUsingField == null
@@ -197,7 +179,6 @@ namespace SteamP2PFriends.Patches.P0EDiagnostic
                 nameof(Hooks.CheckClaimsPostfix), HarmonyPatchType.Postfix, "DP-4-checkClaims-Postfix");
 
             // DP-5 ReceiveBarricadeNone Prefix + Postfix + Finalizer
-            // v0.2.3.39 5B-0（Codex 第四十二次审计 §5 授权）：新增 Finalizer 异常诊断
             System.Type[] receiveBarricadeNoneParams = {
                 typeof(ServerInvocationContext).MakeByRefType(),
                 typeof(Vector3), typeof(float), typeof(float), typeof(float)
@@ -218,13 +199,11 @@ namespace SteamP2PFriends.Patches.P0EDiagnostic
             DP6_Simulate_Registered = RegisterOne(harmony, "simulate", simulateParams,
                 nameof(Hooks.SimulatePostfix), HarmonyPatchType.Postfix, "DP-6-simulate-Postfix");
 
-            // DP-7 build Prefix + Postfix (NEW P1-R7)
             DP7_Build_Registered = RegisterOne(harmony, "build", null,
                 nameof(Hooks.BuildPrefix), HarmonyPatchType.Prefix, "DP-7-build-Prefix")
                 && RegisterOne(harmony, "build", null,
                 nameof(Hooks.BuildPostfix), HarmonyPatchType.Postfix, "DP-7-build-Postfix");
 
-            // DP-8 BarricadeManager.dropBarricade Prefix + Postfix (NEW P1-R7)
             System.Type[] dropBarricadeParams = {
                 typeof(Barricade), typeof(Transform), typeof(Vector3),
                 typeof(float), typeof(float), typeof(float),
@@ -237,7 +216,6 @@ namespace SteamP2PFriends.Patches.P0EDiagnostic
                 nameof(Hooks.DropBarricadePostfix), HarmonyPatchType.Postfix, "DP-8-dropBarricade-Postfix",
                 targetType: typeof(BarricadeManager));
 
-            // v0.2.3.39 F1（Codex 第四十三次审计 §3 P0-F1 返修）：DP-5 Finalizer owner 精确自检
             // 登记成功不等于 owner 精确自检成功；任一失败都 fail-closed
             VerifyDP5FinalizerOwner(harmony);
 
@@ -254,7 +232,6 @@ namespace SteamP2PFriends.Patches.P0EDiagnostic
         }
 
         /// <summary>
-        /// v0.2.3.39 F1（Codex 第四十三次审计 §3 P0-F1 返修）：DP-5 Finalizer owner 精确自检。
         /// 使用精确 MethodInfo 比较，要求 exactExpectedCount == 1。
         /// 同 owner 的其他合法 Prefix/Postfix 不影响此验证（仅检查 Finalizers 集合）。
         /// owner 自检失败必然令 AllRegistrationsSucceeded=false。
@@ -425,7 +402,6 @@ namespace SteamP2PFriends.Patches.P0EDiagnostic
             catch { return "error"; }
         }
 
-        // ====================== State Structs (P0-R1: single struct per Prefix/Postfix pair) ======================
 
         private struct StartPrimaryState
         {
@@ -433,7 +409,6 @@ namespace SteamP2PFriends.Patches.P0EDiagnostic
             public bool isValid;
             public bool wasAsked;
             public int instanceId;
-            // v0.2.3.38 4B 编码 R4：pendingBuildHandle 必须在 Prefix 读取 before，
             // Postfix 读取 after。Postfix 读取值不可标为 before。
             public int pendingBuildHandle;
         }
@@ -456,7 +431,6 @@ namespace SteamP2PFriends.Patches.P0EDiagnostic
 
         private static class Hooks
         {
-            // DP-1: startPrimary Prefix - 保存 before 状态（P0-R1: 单一 struct __state）
             // 签名：public override bool startPrimary()，无参数
             internal static void StartPrimaryPrefix(UseableBarricade __instance, out StartPrimaryState __state)
             {
@@ -464,12 +438,10 @@ namespace SteamP2PFriends.Patches.P0EDiagnostic
                 if (_reflectionFailed) return;
                 try
                 {
-                    // P0-R3: isBusy 直读 player.equipment.isBusy（公共字段链）
                     __state.isBusy = __instance?.player?.equipment?.isBusy ?? false;
                     __state.isValid = _isValidField != null && (bool)_isValidField.GetValue(__instance);
                     __state.wasAsked = _wasAskedField != null && (bool)_wasAskedField.GetValue(__instance);
                     __state.instanceId = __instance.GetInstanceID();
-                    // v0.2.3.38 4B 编码 R4：pendingBuildHandle(before) 必须在 Prefix 读取，
                     // 不得在 Postfix 读取后标为 before。
                     __state.pendingBuildHandle = -1;
                     if (_pendingBuildHandleField != null)
@@ -498,7 +470,6 @@ namespace SteamP2PFriends.Patches.P0EDiagnostic
                     bool isServer = Provider.isServer;
                     bool isDedicated = Dedicator.IsDedicatedServer;
 
-                    // v0.2.3.38 4B 编码 R4：pendingBuildHandle(after) 在 Postfix 读取，
                     // 与 Prefix 的 before 值一并输出 (before=X,after=Y)。
                     int pendingBuildHandleAfter = -1;
                     if (_pendingBuildHandleField != null)
@@ -617,7 +588,6 @@ namespace SteamP2PFriends.Patches.P0EDiagnostic
                 }
             }
 
-            // DP-5: ReceiveBarricadeNone Prefix - 保存 before 状态（P0-R1: 单一 struct __state）
             // 签名：public void ReceiveBarricadeNone(in ServerInvocationContext context, Vector3 newPoint, float newAngle_X, float newAngle_Y, float newAngle_Z)
             internal static void ReceiveBarricadeNonePrefix(UseableBarricade __instance,
                 Vector3 newPoint,
@@ -676,9 +646,6 @@ namespace SteamP2PFriends.Patches.P0EDiagnostic
                 }
             }
 
-            // DP-5: ReceiveBarricadeNone Finalizer - v0.2.3.39 5B-0（Codex 第四十二次审计 §5 授权）
-            // v0.2.3.39 5B-1A（Codex 第四十六次审计 §6 授权）：扩展依赖快照
-            //   - 仅在 __exception != null 时输出（Codex §6.2）
             //   - 仅只读快照，不修改任何字段
             //   - 私有 help 字段使用启动时缓存反射（不运行时查找）
             //   - 反射缓存失败已进入 Barricade reflectionFailed fail-closed
@@ -692,7 +659,6 @@ namespace SteamP2PFriends.Patches.P0EDiagnostic
                 // 正常返回（无异常）只计数，不输出堆栈
                 if (__exception == null) return null;
 
-                // Finalizer 自身使用 try/catch 保护（Codex §5.1 要求）
                 try
                 {
                     _dp5ExceptionCount++;
@@ -711,7 +677,6 @@ namespace SteamP2PFriends.Patches.P0EDiagnostic
                         stack = stack.Substring(0, 1024) + "...<truncated>";
                     }
 
-                    // v0.2.3.39 5B-1A（Codex 第四十六次审计 §6）：依赖快照
                     // 仅在异常时输出，用于确认 Listen Host 远端实例的 L553 help=null 候选
                     // 所有字段读取使用 try/catch 保护，任一异常不影响其他字段
                     string depSnapshot = BuildDependencySnapshot(__instance);
@@ -738,7 +703,6 @@ namespace SteamP2PFriends.Patches.P0EDiagnostic
             }
 
             /// <summary>
-            /// v0.2.3.39 5B-1A v2（Codex 第四十七次审计 §4.1 授权返修）：
             ///   - 逐字段独立 try/catch：一个字段异常不得阻断其他字段输出
             ///   - 三态输出：true/false/unknown(errorType)，不得用默认 false 冒充成功读取
             ///   - help 4 属性：helpFieldCached / helpClrNull / helpUnityNull / helpType
@@ -907,7 +871,6 @@ namespace SteamP2PFriends.Patches.P0EDiagnostic
                     parts.Add("questsNull=unknown(notRead)");
                 }
 
-                // ===== help 4 属性（Codex §4.1.2） =====
                 // helpFieldCached：启动时反射缓存是否成功
                 // helpClrNull：C# null check（ReferenceEquals，避免 == 重载干扰）
                 // helpUnityNull：Unity Object == 重载 null check（Transform 是 Unity Object）
@@ -988,7 +951,6 @@ namespace SteamP2PFriends.Patches.P0EDiagnostic
                 return string.Join(" ", parts);
             }
 
-            // DP-6: simulate Postfix - isUseable 用属性反射（P0-R3）
             // 签名：public override void simulate(uint simulation, bool inputSteady)
             internal static void SimulatePostfix(UseableBarricade __instance, uint simulation, bool inputSteady)
             {
@@ -1000,14 +962,12 @@ namespace SteamP2PFriends.Patches.P0EDiagnostic
                     bool isUsing = false, isUseable = false;
                     if (_isUsingField != null) try { isUsing = (bool)_isUsingField.GetValue(__instance); } catch { }
                     if (_isUseableProperty != null) try { isUseable = (bool)_isUseableProperty.GetValue(__instance, null); } catch { }
-                    // P0-R3: isBusy 直读 player.equipment.isBusy
                     bool isBusy = __instance?.player?.equipment?.isBusy ?? false;
 
                     bool isLocalPlayer = __instance?.player?.channel?.IsLocalPlayer ?? false;
                     bool isServer = Provider.isServer;
                     bool isDedicated = Dedicator.IsDedicatedServer;
 
-                    // v0.2.3.38 4B 编码：扩展 DP-6 字段用于 4C 离线关联
                     //   - isBuilding/startedUse/pendingBuildHandle：与 DP-7 build 关联，证明 simulate 期间建造状态
                     //   - sessionQuota：证明日志缺席不是配额耗尽导致
                     bool isBuilding = false;
@@ -1032,7 +992,6 @@ namespace SteamP2PFriends.Patches.P0EDiagnostic
                 }
             }
 
-            // DP-7: build Prefix+Postfix（P1-R7 新增）
             // 签名：private void build()，无参数
             internal static void BuildPrefix(UseableBarricade __instance, out BuildState __state)
             {
@@ -1082,7 +1041,6 @@ namespace SteamP2PFriends.Patches.P0EDiagnostic
                 }
             }
 
-            // DP-8: BarricadeManager.dropBarricade Prefix+Postfix（P1-R7 新增）
             // 签名：public static Transform dropBarricade(Barricade barricade, Transform hit, Vector3 point, float angle_x, float angle_y, float angle_z, ulong owner, ulong group)
             internal static void DropBarricadePrefix(Barricade barricade, Transform hit, Vector3 point,
                 float angle_x, float angle_y, float angle_z, ulong owner, ulong group)
@@ -1099,7 +1057,6 @@ namespace SteamP2PFriends.Patches.P0EDiagnostic
                     catch { }
                     string hitName = hit != null ? hit.name : "null";
                     string ownerMasked = DiagnosticMaskUtil.MaskSteamId(owner);
-                    // P0-R8: group 同样是 64 位 Steam 标识符，必须脱敏（0 时输出 0，非 0 时输出脱敏值）
                     string groupMasked = group == 0UL ? "0" : DiagnosticMaskUtil.MaskSteamId(group);
                     string role = Provider.isServer ? "Host" : "Client";
 

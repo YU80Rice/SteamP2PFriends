@@ -8,7 +8,6 @@ using UnityEngine;
 namespace SteamP2PFriends.Patches
 {
     /// <summary>
-    /// v0.2.3.19 D-Vis-9 诊断 patch（PlayerMovement.tellState - 位置同步追踪）。
     ///
     /// 目标：追踪服务器->客机位置同步 RPC 调用，定位"客机端位置始终不变"根因。
     ///
@@ -146,7 +145,6 @@ namespace SteamP2PFriends.Patches
         }
 
         /// <summary>
-        /// v0.2.3.19 P1：客机断开时清除节流状态。
         /// </summary>
         public static void OnClientDisconnected()
         {

@@ -40,8 +40,8 @@ SteamP2PFriends 采用人类主导、AI 协作的工程流程。本文档记录�
 
 ## 发布规则
 
-- 发布包使用 `publish/<version>/SteamP2PFriends.zip`。
+- 发布包使用 `publish/<version>/SteamP2PFriends-v<version>.zip`。
 - ZIP 内只包含 `BepInEx/plugins/SteamP2PFriends.dll`。
-- Beta 版使用 GitHub Prerelease，不宣称未完成的 SakuraFRP、背包幽灵图标或外观资产同步已通过。
+- Beta 版使用 GitHub Prerelease；发布说明必须区分当前 DLL 的动态证据、未覆盖环境与 `offlineOnly` 认证限制。
 
-**最后更新**：2026-08-10
+**最后更新**：2026-08-18

@@ -11,9 +11,7 @@ using UnityEngine;
 namespace SteamP2PFriends.Patches.P0EDiagnostic
 {
     /// <summary>
-    /// v0.2.3.38 P0-E-1 阶段 2 诊断补丁（Codex 阶段 2 外部审计 P0-R1~R7 返修版）：
     ///
-    /// v0.2.3.38 阶段 2 第一版此补丁已实现 VerifyPatchRegistered，但 Codex Finding 4 要求
     /// 三个 P0EDiagnostic 补丁统一使用 WorldSyncDiagnosticCore.RegisterIdentityPatch
     /// 以确保 identity-based 验证（original + owner + PatchMethod + patchType）。
     ///
@@ -24,8 +22,6 @@ namespace SteamP2PFriends.Patches.P0EDiagnostic
     ///   DP-2 ReceivePlayerStates Postfix：客机端接收后聚合 seq + count + 调用次数
     ///   DP-3 PlayerMovement.tellState Prefix：客机端每实体落地前快照 position + isSentinel + before transform.position
     ///
-    /// P0-R4: 所有 DP 使用 WorldSyncDiagnosticCore.RegisterIdentityPatch
-    /// P0-R5: 静态构造注册 RegisterSessionResetCallback，调用 ResetCounters + 清空节流时间
     /// </summary>
     public static class PlayerManagerCullingDiagnosticPatch
     {
@@ -79,7 +75,6 @@ namespace SteamP2PFriends.Patches.P0EDiagnostic
         private static bool _reflectionCached;
         private static bool _reflectionFailed;
 
-        // Session ID（P0-R5）
         private static int _sessionId = 0;
         public static int CurrentSessionId => _sessionId;
 
@@ -126,7 +121,6 @@ namespace SteamP2PFriends.Patches.P0EDiagnostic
         }
 
         /// <summary>
-        /// 由 Plugin 在初始化阶段调用，集中登记所有诊断 Hook（P0-R4: identity-based）。
         /// </summary>
         public static bool RegisterManual(Harmony harmony)
         {

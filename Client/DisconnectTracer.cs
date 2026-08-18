@@ -5,7 +5,6 @@ using UnityEngine;
 namespace SteamP2PFriends.Client
 {
     /// <summary>
-    /// v0.2.3.3 P1-C：记录真实断线发起方（Codex 第四次审计外部审计报告）。
     ///
     /// 设计目标：
     ///   - 在插件所有 Provider.disconnect() / Provider.RequestDisconnect() 调用点记录 reason 和调用栈。

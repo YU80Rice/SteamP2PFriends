@@ -10,7 +10,6 @@ using UnityEngine;
 namespace SteamP2PFriends.Patches
 {
     /// <summary>
-    /// v0.2.3.33 P0-C-1 车辆周期性状态广播（Codex 第二十一次双机测试外部审计 §6.2 裁决事项 2 + §4.1 路线 A 授权实施）：
     ///
     /// 根因（U3-SDK VehicleManager.cs:2844-2930 Update + InteractableVehicle.cs:3908-3950 OnUpdate）：
     ///
@@ -35,7 +34,6 @@ namespace SteamP2PFriends.Patches
     ///   L3951 else  <-- 客机端动画插值（listen host 房主需要此分支）
     ///     L3953-3963 AnimatedSteeringAngle / AnimatedForwardVelocity 等插值
     ///
-    /// 问题（Codex §3.3 验证）：
     ///   1. L2918 被 IsDedicatedServer 门控，listen host 下 sendVehicleStates 不调用
     ///   2. L3929-3935 的 updates.Count > 0 条件永远为 false（updates 字段已废弃，无 Add 调用，
     ///      InteractableVehicle.cs:857-860 注释明确说明 obsolete）
@@ -46,7 +44,6 @@ namespace SteamP2PFriends.Patches
     ///   - 主机日志：wouldSendVehicleStates=False（全程）
     ///   - 客机日志：0 次 ReceiveVehicleStates
     ///
-    /// 修复方案（Codex §4.1 路线 A 授权实施）：
     ///
     /// 子任务 1：Transpiler 修改 VehicleManager.Update L2918（第 2 处 IsDedicatedServer 调用）
     ///   替换为 ListenRegionSyncEligibility.IsDedicatedOrP2PHost()
@@ -87,9 +84,7 @@ namespace SteamP2PFriends.Patches
     ///   - 反射访问仅读取/写入 4 个字段，不调用 vanilla private 方法（MarkForReplicationUpdate 是 public）
     ///   - Postfix 守门条件确保只在 listen host 下执行（客机端不执行）
     ///
-    /// 禁止项（Codex §6.2 裁决事项 5）：
     ///   - 不替换 VehicleManager.Update L2853
-    ///   - 不夹带 P0-E / ItemManager.dropItem 修改
     ///   - 不替换 AnimalManager.tickAnimal L1019
     ///   - 不替换 AnimalManager.addAnimal L523
     /// </summary>
@@ -111,8 +106,6 @@ namespace SteamP2PFriends.Patches
         private const string PatchOnUpdatePostfixName = nameof(OnUpdate_Postfix);
 
         // 反射字段访问委托（InteractableVehicle internal/private 字段）
-        // v0.2.3.34 Medium 优化：FieldInfo.GetValue/SetValue -> AccessTools.FieldRefAccess
-        // 消除每次反射调用的 boxing/方法调用开销（Codex 第二十二次审计 §2 Medium 授权实施）
         private static readonly AccessTools.FieldRef<InteractableVehicle, bool> _hasUnityCalledStartRef =
             AccessTools.FieldRefAccess<InteractableVehicle, bool>("hasUnityCalledStart");
         private static readonly AccessTools.FieldRef<InteractableVehicle, bool> _needsReplicationUpdateRef =
@@ -138,7 +131,6 @@ namespace SteamP2PFriends.Patches
                 return false;
             }
 
-            // v0.2.3.34 Medium 优化后，FieldRefAccess 在首次访问时若字段不存在会抛异常
             // （静态字段初始化时即抛 TypeLoadException 或返回 null 委托），
             // 此处改为运行时 null 检查（委托调用结果不可预判，但委托本身非 null）
             // 保留守门逻辑：若任一委托为 null，登记失败
@@ -385,7 +377,6 @@ namespace SteamP2PFriends.Patches
         }
 
         /// <summary>
-        /// v0.2.3.33 P0-C-1 车辆 Transpiler 主实现。
         /// 替换 vanilla VehicleManager.Update 中第 2 处 Dedicator.get_IsDedicatedServer() 调用（L2918）
         /// 为 ListenRegionSyncEligibility.IsDedicatedOrP2PHost()。
         ///
@@ -477,7 +468,6 @@ namespace SteamP2PFriends.Patches
         }
 
         /// <summary>
-        /// v0.2.3.33 P0-C-1 车辆 OnUpdate Postfix：listen host 下补充位移检测 + MarkForReplicationUpdate。
         ///
         /// 守门条件：
         ///   - Provider.isServer（listen host 侧）
@@ -510,9 +500,7 @@ namespace SteamP2PFriends.Patches
             if (!Provider.isServer) return;
             if (Dedicator.IsDedicatedServer) return;
             if (!HostManager.ShouldProcessClientHostListen()) return;
-            // v0.2.3.34 Low-1：VehicleManager.instance 空值守卫
             // teardown 阶段 VehicleManager.instance 可能已销毁但 OnUpdate 仍被调用一次，
-            // 导致 NRE 被 catch-all 捕获隐藏诊断（Codex 第二十一次审计 §2 Low-1 授权实施）
             if (VehicleManager.instance == null) return;
 
             try
@@ -520,7 +508,6 @@ namespace SteamP2PFriends.Patches
                 if (__instance == null) return;
 
                 // hasUnityCalledStart 检查（与 vanilla L2857/L2882 一致）
-                // v0.2.3.34 Medium：FieldRefAccess 替代 FieldInfo.GetValue
                 bool hasUnityCalledStart = _hasUnityCalledStartRef(__instance);
                 if (!hasUnityCalledStart) return;
 
@@ -540,7 +527,6 @@ namespace SteamP2PFriends.Patches
                     Mathf.Abs(lastUpdatedPos.z - curPos.z) > Provider.UPDATE_DISTANCE)
                 {
                     // 更新 lastUpdatedPos（与 vanilla L3945 一致）
-                    // v0.2.3.34 Medium：FieldRefAccess 替代 FieldInfo.SetValue
                     _lastUpdatedPosRef(__instance) = curPos;
 
                     // 调用 MarkForReplicationUpdate（public 方法，InteractableVehicle.cs:862）

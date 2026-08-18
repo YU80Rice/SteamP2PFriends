@@ -30,6 +30,7 @@
     <DefineConstants>TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="0Harmony">
@@ -97,11 +98,13 @@
     <Compile Include="Shared\SteamRuntime.cs" />
     <Compile Include="Shared\ReflectionUtil.cs" />
     <Compile Include="Shared\RoleLogger.cs" />
+    <Compile Include="Shared\PluginLogPolicy.cs" />
     <Compile Include="Shared\P2PClientUiEnvironment.cs" />
     <Compile Include="Shared\SteamPersonaDisplay.cs" />
     <Compile Include="Shared\UnifiedJoinAddressClassifier.cs" />
     <Compile Include="Shared\P2PWorldStatusTemplates.cs" />
     <Compile Include="Shared\DiagnosticContext.cs" />
+    <Compile Include="Shared\HarmonyCompatibilityAudit.cs" />
     <Compile Include="Shared\Enums\EHostMode.cs" />
     <Compile Include="Shared\Enums\EP2PLobbyState.cs" />
     <Compile Include="Shared\Enums\EJoinState.cs" />
@@ -129,7 +132,6 @@
     <Compile Include="Patches\CallbackCreateGameServerRedirectPatch.cs" />
     <Compile Include="Patches\LobbiesGameCreatedPatch.cs" />
     <Compile Include="Patches\ClientMethodLoopbackPatch.cs" />
-    <Compile Include="Patches\LanTestDuplicateBypassPatch.cs" />
     <Compile Include="Patches\ProviderInitializeDedicatedUGCPatch.cs" />
     <Compile Include="Patches\ProviderDisconnectPatch.cs" />
     <Compile Include="Patches\SteamworksServerMultiplayerServiceOpenPatch.cs" />
@@ -183,7 +185,6 @@
     <Compile Include="Patches\PlayerClothingVisibilityDiagnosticPatch.cs" />
     <Compile Include="Patches\PlayerClothingLoadAppearanceFixPatch.cs" />
     <Compile Include="Patches\PlayerLookAnimatorDiagnosticPatch.cs" />
-    <Compile Include="Patches\SteamChannelSendDiagnosticPatch.cs" />
     <Compile Include="Patches\SteamChannelTransportDiagnosticPatch.cs" />
     <Compile Include="Patches\PlayerMovementTellStateDiagnosticPatch.cs" />
     <Compile Include="Patches\PlayerAnimatorSmrEnabledDiagnosticPatch.cs" />

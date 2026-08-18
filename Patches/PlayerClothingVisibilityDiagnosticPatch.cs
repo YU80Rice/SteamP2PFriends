@@ -7,14 +7,11 @@ using System.Reflection;
 namespace SteamP2PFriends.Patches
 {
     /// <summary>
-    /// v0.2.3.18 D-Vis-1/2/7 诊断 patch 合集（客机模型可见性差异诊断）。
     ///
     /// D-Vis-1：PlayerClothing.ReceiveClothingState Prefix（双端）
     ///   - U3-SDK 路径：PlayerClothing.cs:1318
     ///   - 签名：public void ReceiveClothingState(in ClientInvocationContext context)
     ///   - 目的：验证 H1 假设（客机->主机应用层同步失效）
-    ///   - 注：v0.2.3.17 已在 InitialStateReceiveDiagnosticPatch 中登记 ReceiveClothingState，
-    ///         本 patch 仅在 v0.2.3.18 阶段补充 D-Vis-1 标签日志，不重复登记
     ///         （避免双重 patch 导致日志混乱）
     ///
     /// D-Vis-2：PlayerEquipment.ReceiveSlot / ReceiveUpdateState / ReceiveEquip Prefix（双端）
@@ -54,7 +51,6 @@ namespace SteamP2PFriends.Patches
         }
 
         // ---------- D-Vis-1: PlayerClothing.ReceiveClothingState ----------
-        // 注：v0.2.3.17 InitialStateReceiveDiagnosticPatch 已登记此方法，v0.2.3.18 不重复登记
         // 本方法仅返回 true 占位，实际 D-Vis-1 日志由 InitialStateReceiveDiagnosticPatch 输出
         private static bool RegisterDVis1(Harmony harmony)
         {

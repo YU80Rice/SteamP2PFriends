@@ -6,7 +6,6 @@ using UnityEngine;
 namespace SteamP2PFriends.Host
 {
     /// <summary>
-    /// v0.2.3 P0-E：Player 初始化状态跟踪表。
     ///
     /// 审计员要求：
     ///   - 建立按 Player 实例记录的 initialization state：
@@ -52,7 +51,6 @@ namespace SteamP2PFriends.Host
 
         /// <summary>
         /// 标记 Player 所在 GameObject 的 instanceId 为 Constructed。
-        /// 由 SteamPlayer 构造 Postfix 调用（与 P0-C 同一处）。
         /// </summary>
         public static void MarkConstructed(Player player)
         {

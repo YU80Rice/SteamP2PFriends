@@ -8,7 +8,6 @@ using System.Reflection;
 namespace SteamP2PFriends.UI
 {
     /// <summary>
-    /// Stage 9-3 (v2) [指令 A + C + G]: explicit DNS direct-connect mode toggle injected into the
     /// vanilla MenuPlayConnectUI layout. Uses ISleekToggle (Glazier), never IMGUI/OnGUI.
     ///
     /// Layout: a 30px row between the password field and the connect button; the vanilla connect

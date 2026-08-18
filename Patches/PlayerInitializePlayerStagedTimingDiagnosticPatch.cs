@@ -9,9 +9,7 @@ using System.Reflection;
 namespace SteamP2PFriends.Patches
 {
     /// <summary>
-    /// v0.2.3.20 D-Vis-18 诊断 patch（InitializePlayer 分阶段计时）。
     ///
-    /// 审计授权：外部审计报告-第十三次双机测试-v0.2.3.19-修订版验收 §9.2 授权实施。
     ///
     /// 审计要求（§9.1 修正 4 + §5.4）：
     ///   - 在 D-Vis-13 基础上扩展，用 Stopwatch 分段计时

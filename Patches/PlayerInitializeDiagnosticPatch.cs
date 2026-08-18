@@ -7,12 +7,8 @@ using System.Reflection;
 namespace SteamP2PFriends.Patches
 {
     /// <summary>
-    /// v0.2.3.3 第四次审计 P0-A 修复（Codex 外部审计）：纯观察，删除所有 PlayerInitializationTracker 调用。
-    /// v0.2.3.3 P0-A：删除 serverBoundsHistory 引用（该字段为服务器端专属，客机永远为 null）。
     /// 状态机所有权归 InitializePlayerStatePatch（PlayerUpdateGuardPatch.cs）独占。
     /// 本 patch 仅输出 ENTER/RETURNED/THREW 诊断日志 + __state 透传。
-    /// v0.2.3.3 P1-A：所有 [Host] 改为 RoleLogger.ResolveDynamicRole()。
-    /// v0.2.3.3 P0-B：本地 Player.InitializePlayer Postfix 触发 NativeLoadingGateDumper.Dump。
     /// </summary>
     [HarmonyPatch(typeof(Player), "InitializePlayer")]
     public static class PlayerInitializeDiagnosticPatch
@@ -55,8 +51,6 @@ namespace SteamP2PFriends.Patches
 
         /// <summary>
         /// 纯观察 Postfix：仅记录 RETURNED 日志，不写 tracker。
-        /// v0.2.3.3 P0-A：删除 serverBoundsHistory 引用。
-        /// v0.2.3.3 P0-B：本地 Player.InitializePlayer Postfix 触发 NativeLoadingGateDumper.Dump。
         /// </summary>
         [HarmonyPostfix]
         public static void Postfix(Player __instance, bool __state)
@@ -81,7 +75,6 @@ namespace SteamP2PFriends.Patches
                     $"{DiagnosticContext.FormatPrefix("Player.InitializePlayer RETURNED")} " +
                     $"steamId={steamId} isLocalPlayer={isLocalPlayer} isServer={Provider.isServer}");
 
-                // v0.2.3.3 P0-B：本地 Player.InitializePlayer Postfix 触发加载门快照
                 if (isLocalPlayer && !Provider.isServer)
                 {
                     NativeLoadingGateDumper.Dump("Player.InitializePlayer-Postfix(localPlayer)");

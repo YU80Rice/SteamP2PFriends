@@ -9,13 +9,8 @@ using System.Reflection.Emit;
 namespace SteamP2PFriends.Patches
 {
     /// <summary>
-    /// v0.2.3.13 新增（Codex 第八次审计 P0-B + P0-C + P0-D）：
     /// StructureManager.onRegionUpdated step 1 远程区域同步资格 patch + askStructures 决定性日志。
     ///
-    /// v0.2.3.13 返修（Codex v0.2.3.13 外部审计报告 P0-2 + P0-3 + P1-1）：
-    ///   - P0-2：Transpiler 改为原地修改 CodeInstruction（保留 labels/blocks）+ 使用 CodeInstruction.Calls(dedicatedGetter)。
-    ///   - P0-3：新增 OnClientDisconnected + ResetAll，按断线/新会话清除 _eligibilityLogCounts。
-    ///   - P1-1：Transpiler 和 askStructures Prefix 增加精确 owner + patch method + exact 1/1 自检。
     ///
     /// 目标：解除 listen server 模式下"主机不向远程客机发送 Structures RPC"的诅咒。
     /// vanilla 源码（U3-SDK StructureManager.cs:1074-1096）：
@@ -27,7 +22,6 @@ namespace SteamP2PFriends.Patches
     ///       }
     ///   }
     ///
-    /// 严格自检（P0-C fail-closed + P1-1 精确 owner）：
     ///   - onRegionUpdated 签名精确解析（private instance, 7 args）
     ///   - askStructures 签名精确解析（internal instance, 4 args: ITransportConnection, byte, byte, float）
     ///   - Transpiler replacement count 必须精确等于 1
@@ -44,7 +38,6 @@ namespace SteamP2PFriends.Patches
         public static string SignatureSummary { get; private set; } = "未自检";
         public static bool AskStructuresPrefixRegistered { get; private set; }
 
-        // P1-1：精确 owner 自检状态
         public static bool TranspilerOwnerVerified { get; private set; }
         public static bool PrefixOwnerVerified { get; private set; }
         public static string TranspilerOwnerSummary { get; private set; } = "未自检";
@@ -134,7 +127,6 @@ namespace SteamP2PFriends.Patches
                     return false;
                 }
 
-                // P1-1：精确 owner 自检
                 bool ownerOk = VerifyPatchOwner(original, isTranspiler: true);
                 if (!ownerOk)
                 {
@@ -176,7 +168,6 @@ namespace SteamP2PFriends.Patches
 
                 harmony.Patch(original, prefix: new HarmonyMethod(prefix));
 
-                // P1-1：精确 owner 自检
                 bool ownerOk = VerifyPatchOwner(original, isTranspiler: false);
                 if (!ownerOk)
                 {
@@ -197,7 +188,6 @@ namespace SteamP2PFriends.Patches
         }
 
         /// <summary>
-        /// P1-1：精确 owner + patch method + exact 1/1 自检。
         /// </summary>
         private static bool VerifyPatchOwner(MethodInfo original, bool isTranspiler)
         {
@@ -375,8 +365,6 @@ namespace SteamP2PFriends.Patches
         }
 
         /// <summary>
-        /// P0-B + P0-2 返修：Transpiler 主实现。
-        /// v0.2.3.13 返修（Codex P0-2）：
         ///   - 改用 CodeInstruction.Calls(dedicatedGetter) 替代 ReferenceEquals
         ///   - 原地修改 codes[i].opcode/operand，保留 labels/blocks
         /// </summary>
@@ -413,10 +401,8 @@ namespace SteamP2PFriends.Patches
                 CodeInstruction instr = codes[i];
                 if (instr == null) continue;
 
-                // P0-2 返修：使用 CodeInstruction.Calls(dedicatedGetter)
                 if (instr.Calls(dedicatedGetter))
                 {
-                    // P0-2 返修：原地修改 opcode/operand，保留 labels/blocks
                     instr.opcode = OpCodes.Ldarg_1;
                     instr.operand = null;
                     codes.Insert(i + 1, new CodeInstruction(OpCodes.Call, eligibilityMethod));
@@ -439,7 +425,6 @@ namespace SteamP2PFriends.Patches
         }
 
         /// <summary>
-        /// v0.2.3.13 P0-D：askStructures Prefix 决定性日志。
         /// 仅记录日志，不影响原方法行为。
         /// askStructures 签名：void askStructures(ITransportConnection, byte, byte, float)
         /// </summary>
@@ -455,7 +440,6 @@ namespace SteamP2PFriends.Patches
             {
                 if (sp != null && sp.transportConnection == transportConnection)
                 {
-                    // v0.2.3.13 NRE 修复：SteamPlayerID 重载 != 但未判空，用 ?. 绕开
                     steamId = sp.playerID?.steamID.m_SteamID ?? 0UL;
                     break;
                 }
@@ -475,7 +459,6 @@ namespace SteamP2PFriends.Patches
 
             string transportDesc = transportConnection.GetType().Name;
 
-            // v0.2.3.15 P0-D：send 日志附加 escPaused 前缀（供外部审计定位 RegionSync 延迟根因）
             string escPrefix = SteamP2PFriends.Host.HostManager.EscPauseDetectorEnabled
                 ? $"escPaused={SteamP2PFriends.Host.HostManager.IsEscPausedCurrent} "
                 : "";
@@ -486,13 +469,11 @@ namespace SteamP2PFriends.Patches
         }
 
         /// <summary>
-        /// v0.2.3.13 返修 P0-3：Provider.onClientDisconnected 回调。
         /// </summary>
         public static void OnClientDisconnected()
         {
             try
             {
-                // v0.2.3.13 NRE 修复：Provider.clients 在 shutdown 期间可能为 null
                 if (Provider.clients == null) return;
 
                 var activeSteamIds = new HashSet<ulong>();
@@ -500,7 +481,6 @@ namespace SteamP2PFriends.Patches
                 {
                     if (sp == null) continue;
 
-                    // v0.2.3.13 NRE 修复：SteamPlayerID 重载 != 但未判空，用 ?. 绕开
                     ulong steamId = sp.playerID?.steamID.m_SteamID ?? 0UL;
                     if (steamId != 0UL)
                     {
@@ -535,7 +515,6 @@ namespace SteamP2PFriends.Patches
         }
 
         /// <summary>
-        /// v0.2.3.13 返修 P0-3：开新服/停服时清除所有计数。
         /// </summary>
         public static void ResetAll()
         {

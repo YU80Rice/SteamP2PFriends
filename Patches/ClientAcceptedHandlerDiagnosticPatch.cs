@@ -8,11 +8,9 @@ using System.Reflection;
 namespace SteamP2PFriends.Patches
 {
     /// <summary>
-    /// v0.2.3 P0-D D-7：ClientMessageHandler_Accepted.ReadMessage Postfix 诊断 patch。
     ///
     /// 审计员要求：
     ///   - 标记 ServerAccepted（不推进到 GameplayReady）。
-    ///   - 与 P1-G 状态机配套，作为 ServerAccepted 阶段的推进信号。
     ///
     /// ClientMessageHandler_Accepted.ReadMessage 是客机收到 Accepted 消息的入口。
     /// vanilla 在此方法中调用 Provider.onClientConnected.Invoke()，但审计员明确：
@@ -31,7 +29,6 @@ namespace SteamP2PFriends.Patches
         /// <summary>
         /// Postfix for ClientMessageHandler_Accepted.ReadMessage
         /// 注意：本 patch 是客机侧，主机不会触发。
-        /// v0.2.3.3 P0-B：触发 NativeLoadingGateDumper.StartPostAcceptedTracking + Dump。
         /// </summary>
         public static void ReadMessage_Postfix(NetPakReader reader)
         {
@@ -41,7 +38,6 @@ namespace SteamP2PFriends.Patches
                     $"{DiagnosticContext.FormatPrefix("ClientMessageHandler_Accepted.ReadMessage EXIT")} " +
                     $"server={Provider.server.m_SteamID} isClient={Provider.isClient} isConnected={Provider.isConnected}");
 
-                // v0.2.3.3 P0-B：启动 Accepted 后周期性加载门快照
                 NativeLoadingGateDumper.StartPostAcceptedTracking();
                 NativeLoadingGateDumper.Dump("ClientMessageHandler_Accepted.ReadMessage-Postfix");
 

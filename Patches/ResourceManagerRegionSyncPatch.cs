@@ -9,11 +9,8 @@ using System.Reflection.Emit;
 namespace SteamP2PFriends.Patches
 {
     /// <summary>
-    /// v0.2.3.29 新增（Codex 第十八次审计 P0-B 授权实施）：
     /// ResourceManager.onRegionUpdated step 3 远程区域同步资格 patch + SendResources_Write 决定性日志。
     ///
-    /// 授权来源：第十八次双机测试外部审计裁决-Codex §5.1
-    ///   "P0-B 允许修改：
     ///     2. ResourceManager.onRegionUpdated 中仅替换 step 3 外层的一个 dedicated getter。"
     ///
     /// 目标：解除 listen server 模式下"主机不向远程客机发送 Resources RPC"的诅咒。
@@ -31,11 +28,9 @@ namespace SteamP2PFriends.Patches
     ///   实际写入由 SendResources_Write(NetPakWriter, byte, byte)（L530）完成。
     ///   本 patch 对 SendResources_Write 加 Prefix 决定性日志，证明 SendResources 真实触发。
     ///
-    /// helper 语义（Codex §5.1.4-5.5）：
     ///   原生 dedicated，或 Provider.isServer && HostManager.IsP2PHostMode && recipient 为真实远端非 loopback 玩家。
     ///   ListenRegionSyncEligibility.IsDedicatedOrP2PRemoteRecipient(Player) 已实现此语义。
     ///
-    /// 严格自检（Codex §5.1.7 + §6 静态阶段）：
     ///   - onRegionUpdated 签名精确解析（private instance, 7 args: Player, byte x5, ref bool）
     ///   - SendResources_Write 签名精确解析（private static, 3 args: NetPakWriter, byte, byte）
     ///   - Transpiler replacement count 必须精确等于 1
@@ -44,7 +39,6 @@ namespace SteamP2PFriends.Patches
     ///   - SendResources_Write Prefix owner 为 com.yu80rice.steamp2pfriends，patch method 为 ResourceManagerRegionSyncPatch.SendResources_Write_Prefix，count=1
     ///   任一失败并入 DiagnosticBuildValid fail-closed。
     ///
-    /// 严格禁止（Codex §5.1.6）：
     ///   - 不手动写 loaded flag
     ///   - 不在 Postfix 重复调用发送方法
     ///   - 不伪造全局 dedicated 状态
@@ -384,7 +378,6 @@ namespace SteamP2PFriends.Patches
         }
 
         /// <summary>
-        /// v0.2.3.29 P0-B Transpiler 主实现。
         /// 替换 vanilla onRegionUpdated step 3 中的 Dedicator.get_IsDedicatedServer() 调用
         /// 为 ListenRegionSyncEligibility.IsDedicatedOrP2PRemoteRecipient(player)。
         ///
@@ -450,7 +443,6 @@ namespace SteamP2PFriends.Patches
         }
 
         /// <summary>
-        /// v0.2.3.29 P0-B：SendResources_Write Prefix 决定性日志。
         /// 仅记录日志，不影响原方法行为。
         /// SendResources_Write 签名：void SendResources_Write(NetPakWriter, byte, byte)
         /// 该方法由 ClientStaticMethod.Invoke 内部对每个目标连接调用一次，

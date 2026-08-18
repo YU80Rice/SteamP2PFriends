@@ -8,9 +8,7 @@ using System.Collections.Generic;
 namespace SteamP2PFriends.Patches
 {
     /// <summary>
-    /// v0.2.3.2 P0-D D-13：accept 后半段阶段调用诊断 patch。
     ///
-    /// v0.2.3.2 P0-2 修复（Codex 第三次审计）：
     ///   - 补齐 PhysicsMaterialNetTable.Send（真实调用链第一项，Provider.cs:4751）。
     ///   - 补齐 AddClientToThirdpartyAntiCheat（partial method，运行时反射）。
     ///   - 所有 Finalizer 在成功时也输出 OK（原仅异常时记录）。
@@ -316,7 +314,6 @@ namespace SteamP2PFriends.Patches
             int count = transportConnections?.Count ?? -1;
             ulong senderSteamId = ExtractSenderSteamId(__instance);
 
-            // P0-5 修复：记录完整目标列表的 transport 类型
             string transportTypes = "<none>";
             if (transportConnections != null && transportConnections.Count > 0)
             {

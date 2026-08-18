@@ -35,7 +35,6 @@ namespace SteamP2PFriends.Shared
         }
         private static readonly Dictionary<ulong, PersonaCacheEntry> _personaCache = new Dictionary<ulong, PersonaCacheEntry>(16);
 
-        // Beta-5 P1：持久显示名缓存（断线后仍显示最后已知名称）
         private struct DisplayNameEntry
         {
             internal string Name;
@@ -81,7 +80,6 @@ namespace SteamP2PFriends.Shared
             try { return GetTimeFromUnity(); } catch { return 0f; }
         }
 
-        // ===== Beta-5 P1：持久显示名缓存 =====
 
         /// <summary>缓存已连接玩家的 character name（断线后仍可用）。</summary>
         internal static void RememberConnectedCharacterName(CSteamID id, string characterName)

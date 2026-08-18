@@ -7,7 +7,6 @@ using System;
 namespace SteamP2PFriends.Patches
 {
     /// <summary>
-    /// v0.2.3.8 P0-B 修复（审计 v0.2.3.7 报告 Critical-2）：
     ///   封闭 vanilla auth status callback 原始 m_debugMsg 写入 Player.log 的路径。
     ///
     /// 背景：
@@ -17,10 +16,7 @@ namespace SteamP2PFriends.Patches
     ///   由于本插件 CallbackCreateGameServerRedirectPatch 已将 CreateGameServer 重定向到 Create（SteamUser 管道），
     ///   该 callback 在 P2P 模式下确实会被触发，原始 m_debugMsg 会进入 Unity Player.log。
     ///
-    ///   v0.2.3.7 返修报告曾以 "Steam 决定的 m_debugMsg 不含用户敏感输入" 作为安全保证，
-    ///   但未提供代码事实或运行证据。审计 v0.2.3.7 报告 Critical-2 明确要求封闭此路径。
     ///
-    /// 实现策略（审计 v0.2.3.7 报告 Critical-2 "最小修正" 方案 1）：
     ///   1. Prefix patch 双端 OnSteamNetAuthenticationStatusChanged
     ///   2. 在 Prefix 中读取原始 m_debugMsg 并通过 RedactSensitiveNetworkData 脱敏后
     ///      以插件自己的日志格式输出（含 m_eAvail + 脱敏后的 m_debugMsg）

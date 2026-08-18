@@ -7,7 +7,6 @@ using System.Threading.Tasks;
 namespace SteamP2PFriends.Client
 {
     /// <summary>
-    /// Stage 9-3: immutable result of an async DNS resolution. Carries the epoch so the main
     /// thread can discard stale results. The worker only constructs this immutable snapshot and
     /// enqueues it; it never touches Unity, Glazier, Provider or UI.
     /// </summary>
@@ -29,7 +28,6 @@ namespace SteamP2PFriends.Client
     }
 
     /// <summary>
-    /// Stage 9-3: backend contract for async DNS resolution.
     /// </summary>
     internal interface IExplicitDnsResolveBackend
     {
@@ -38,7 +36,6 @@ namespace SteamP2PFriends.Client
     }
 
     /// <summary>
-    /// Stage 9-3 (v2): system DNS backend using Dns.GetHostAddressesAsync on the thread pool.
     /// Worker/continuation never accesses Unity, Glazier, Provider.connect or the game thread.
     /// In-flight is capped (MaxInflight). 指令 F: constructor accepts an injectable resolver so
     /// tests can fault-inject with incomplete TaskCompletionSource tasks (no fake ResetForTest).

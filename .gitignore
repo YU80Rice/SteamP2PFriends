@@ -11,6 +11,10 @@ publish/
 logs-*/
 *.log
 
+# Runtime-test evidence is locally archived through TestLogs scripts, not committed.
+TestLogs/artifacts/*
+!TestLogs/artifacts/.gitkeep
+
 # Backups
 *.bak
 *.backup

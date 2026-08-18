@@ -7,7 +7,6 @@ using UnityEngine;
 namespace SteamP2PFriends.Patches
 {
     /// <summary>
-    /// v0.2.3.19 D-Vis-10 诊断 patch（客机模型可见性差异诊断 - isHiddenWaitingForClothing 生命周期）。
     ///
     /// 审计强制修正 1：D-Vis-10 改为 4 patch 目标，覆盖 isHiddenWaitingForClothing 完整生命周期。
     ///
@@ -31,7 +30,6 @@ namespace SteamP2PFriends.Patches
     ///            - L1375 Player.isLoadingClothing=false（仅 IsLocalPlayer 分支）
     ///            - Postfix 验证 NotifyClothingIsVisible 被调用 + isHiddenWaitingForClothing=false
     ///
-    /// 联合诊断决策树（见 v0.2.3.19 实施规划第 2.2 节）：
     ///   InitializePlayer 触发? -> 是 -> ReceiveClothingState 触发? -> 是 -> NotifyClothingIsVisible 触发?
     ///   -> 是 -> isHiddenWaitingForClothing=false? -> 是 -> SMR.enabled=true?
     ///
@@ -182,7 +180,6 @@ namespace SteamP2PFriends.Patches
             try
             {
                 // PlayerClothing.ReceiveClothingState 已在 InitialStateReceiveDiagnosticPatch 登记
-                // v0.2.3.18 D-Vis-1 也已占位。本 patch 追加 Postfix（与既有 Prefix 共存）。
                 MethodInfo original = AccessTools.Method(typeof(PlayerClothing), "ReceiveClothingState");
                 if (original == null)
                 {

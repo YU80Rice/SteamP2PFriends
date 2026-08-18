@@ -8,9 +8,7 @@ using System.Reflection;
 namespace SteamP2PFriends.Patches
 {
     /// <summary>
-    /// v0.2.3.35 P0-PlayerVisibility 修复（Codex 第二十三次双机测试外部审计 §4.1 授权实施）：
     ///
-    /// 根因（U3-SDK 溯源，Codex 确认）：
     ///   - TransportConnection_Loopback.Send 抛 NotSupportedException：
     ///     D:/Agent-工作目录/U3-SDK/Assets/Runtime/Assembly-CSharp/NetTransport_Loopback/TransportConnection_Loopback.cs:52-55
     ///   - Provider.accept 第二个 foreach 向所有已有客户端广播 PlayerConnected，包括 listen host 自己的 loopback：
@@ -25,11 +23,9 @@ namespace SteamP2PFriends.Patches
     ///     [Error] SendMessageToClient THREW msg=PlayerConnected(5) transport=TransportConnection_Loopback exceptionType=NotSupportedException
     ///   - 客机连入后客机可以看见主机，但主机看不见客机（客机模型未在主机端注册）
     ///
-    /// 修复方案（Codex §4.1 收窄版）：
     ///   Prefix patch NetMessages.SendMessageToClient，仅当目标为 PlayerConnected + TransportConnection_Loopback 时跳过。
     ///   不全局跳过所有 loopback 消息，避免误伤其他必要的本地客户端消息（如 SendInitialGlobalState 等）。
     ///
-    ///   Codex 审计原话（§4.1）：
     ///     "不要使用全局跳过所有 TransportConnection_Loopback 的方案 A。推荐最小侵入方案：
     ///      仅拦截 PlayerConnected 向 loopback 发送，避免全局跳过导致本地客户端丢失其他关键消息。"
     ///
@@ -45,7 +41,6 @@ namespace SteamP2PFriends.Patches
     ///   - 不触碰 Dedicator.IsDedicatedServer（FACT.md 铁律合规）
     ///
     /// 禁止项：
-    ///   - 禁止扩展为全局跳过所有 loopback 消息（Codex §4.1 明确禁止）
     ///   - 禁止在此外拦截其他 EClientMessage（若需扩展必须重新审计）
     /// </summary>
     public static class NetMessagesPlayerConnectedLoopbackPatch
@@ -201,7 +196,6 @@ namespace SteamP2PFriends.Patches
 
                 string summary = $"ownCount={ownCount} methodMatched={methodMatched} sameOwnerOtherMethod={sameOwnerOtherMethodCount} foreignOwner={firstForeignOwner ?? "none"}";
 
-                // 修复（Codex 第二十四次测试中止后定位）：
                 //   原 ownCount != 1 检查过于严格。NetMessages.SendMessageToClient 已有历史 D-5 诊断 Prefix
                 //   （NetMessagesSendDiagnosticPatch.SendMessageToClient_Prefix，同 owner=HarmonyId）。
                 //   两个同 owner 但不同 PatchMethod 的 Prefix 合法共存，不应阻断。

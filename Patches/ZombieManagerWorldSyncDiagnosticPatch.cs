@@ -10,10 +10,8 @@ using UnityEngine;
 namespace SteamP2PFriends.Patches
 {
     /// <summary>
-    /// v0.2.3.27 P0-A 决定性诊断（Codex 第 7 节 P0-A + 静态审计返修）：
     /// ZombieManager 世界同步链路五段证据诊断。
     ///
-    /// v0.2.3.29 返修（Codex 第十八次审计 §5.1 僵尸诊断返修授权）：
     ///   1. OnBoundUpdated 日志先判断 Provider.isServer，客机输出 skip(not server)。
     ///   2. 使用真实的一维 ZombieManager.regions[bound] 安全读取精确 count
     ///      （vanilla L35: public static ZombieRegion[] regions => _regions; 1D 索引）。
@@ -38,7 +36,6 @@ namespace SteamP2PFriends.Patches
     ///     - L1477 `if (player.channel.IsLocalPlayer)` -> L1479 `generateZombies(newBound);`
     ///     - 否则 L1485 `SendZombiesToPlayer(player.channel.owner.transportConnection, newBound);`
     ///     - L1488 `player.movement.loadedBounds[newBound].isZombiesLoaded = true;`
-    ///     - 外层门控：L1471 `if (Provider.isServer)`（v0.2.3.29 返修：必须纳入 vanillaBranch 判定）
     ///   - SendZombiesToPlayer: L669 `private void SendZombiesToPlayer(ITransportConnection transportConnection, byte bound)`
     ///   - SendZombies_Write: L674 `private static void SendZombies_Write(NetPakWriter writer, byte bound)`，
     ///     count = `region.zombies.Count`（L679）
@@ -52,8 +49,6 @@ namespace SteamP2PFriends.Patches
         private const float UpdateLogInterval = 5.0f;
         private static float _lastUpdateLogTime = -100f;
 
-        // v0.2.3.27-P0-A 冒烟中止返修（Codex P0-R8）：vanilla 目标完整参数类型表
-        // v0.2.3.29 返修：新增 SendZombies_Write 参数类型表
         private static readonly System.Type[] VanillaUpdateRegionsParamTypes = System.Type.EmptyTypes;
         private static readonly System.Type[] VanillaOnBoundUpdatedParamTypes =
         {
@@ -98,8 +93,6 @@ namespace SteamP2PFriends.Patches
             && ReceiveZombieStatesPrefixRegistered;
 
         /// <summary>
-        /// v0.2.3.27-P0-A 手动登记（Codex 外部审计裁决 P0-R1～R8）：
-        /// v0.2.3.29 返修：7 个 hook（新增 SendZombies_Write Prefix）。
         /// </summary>
         public static bool RegisterManual(Harmony harmony)
         {
@@ -135,7 +128,6 @@ namespace SteamP2PFriends.Patches
             }
             catch (System.Exception ex) { RoleLogger.Error("[Shared]", $"[WorldSyncDiag/Zombie] SendZombiesToPlayer.Pre 登记异常: {ex}"); r3 = false; }
 
-            // v0.2.3.29 新增：SendZombies_Write Prefix 探针（vanilla L674 private static void SendZombies_Write(NetPakWriter, byte)）
             try
             {
                 r3b = WorldSyncDiagnosticCore.RegisterIdentityPatch(
@@ -181,8 +173,6 @@ namespace SteamP2PFriends.Patches
         }
 
         /// <summary>
-        /// v0.2.3.27-P0-A 冒烟中止返修（Codex P0-R8）：复用类级别 VanillaXxxParamTypes 完整参数表。
-        /// v0.2.3.29 返修：新增 SendZombies_Write VerifyRegistration。
         /// </summary>
         public static bool VerifyRegistration()
         {
@@ -276,7 +266,6 @@ namespace SteamP2PFriends.Patches
         }
 
         // ============= 2. 源事件：onBoundUpdated（玩家进入新 bound） =============
-        // v0.2.3.29 返修：先判断 Provider.isServer，客机输出 skip(not server)
         [HarmonyPrefix]
         [HarmonyPatch(typeof(ZombieManager), "onBoundUpdated")]
         public static void OnBoundUpdated_Prefix(Player player, byte oldBound, byte newBound)
@@ -292,7 +281,6 @@ namespace SteamP2PFriends.Patches
 
                 bool isDedicated = Dedicator.IsDedicatedServer;
 
-                // v0.2.3.29 返修（Codex §5.1.1）：外层 Provider.isServer 门控
                 // U3-SDK ZombieManager.onBoundUpdated L1471: if (Provider.isServer) { ... }
                 // 客机进程 Provider.isServer=false，真实分支应为 skip(not server)，而非 generateZombies。
                 if (!Provider.isServer)
@@ -345,7 +333,6 @@ namespace SteamP2PFriends.Patches
         }
 
         // ============= 3. 发送入口：SendZombiesToPlayer(ITransportConnection, byte) =============
-        // v0.2.3.29 返修：使用 int? count，未知值输出 unknown
         [HarmonyPrefix]
         [HarmonyPatch(typeof(ZombieManager), "SendZombiesToPlayer")]
         public static void SendZombiesToPlayer_Prefix(ITransportConnection transportConnection, byte bound)
@@ -376,7 +363,6 @@ namespace SteamP2PFriends.Patches
         }
 
         // ============= 3b. 发送写入：SendZombies_Write(NetPakWriter, byte) =============
-        // v0.2.3.29 新增（Codex §5.1.3）：只读探针，记录真正写入包的 bound 和精确 regions[bound].zombies.Count
         // vanilla L674-695: private static void SendZombies_Write(NetPakWriter writer, byte bound)
         //   L676: ZombieRegion region = regions[bound];
         //   L679: count = region.zombies.Count
@@ -408,7 +394,6 @@ namespace SteamP2PFriends.Patches
         }
 
         // ============= 4. 客机 Receive 入口：ReceiveZombies（初始 bound 包） =============
-        // v0.2.3.29 返修：使用 int? count，未知值输出 unknown，禁止 delta 算术
         [HarmonyPrefix]
         [HarmonyPatch(typeof(ZombieManager), "ReceiveZombies")]
         public static void ReceiveZombies_Prefix(ref int? __state)
@@ -435,7 +420,6 @@ namespace SteamP2PFriends.Patches
             }
         }
 
-        // v0.2.3.29 返修：Postfix 使用 int? count，未知值输出 unknown，delta 禁止算术
         [HarmonyPostfix]
         [HarmonyPatch(typeof(ZombieManager), "ReceiveZombies")]
         public static void ReceiveZombies_Postfix(int? __state)
@@ -451,7 +435,6 @@ namespace SteamP2PFriends.Patches
 
                 string beforeStr = __state.HasValue ? __state.Value.ToString() : "unknown";
                 string afterStr = countAfterOpt.HasValue ? countAfterOpt.Value.ToString() : "unknown";
-                // v0.2.3.29 返修（Codex §5.1.2）：未知值禁止参与 delta 算术
                 string deltaStr = (__state.HasValue && countAfterOpt.HasValue)
                     ? (countAfterOpt.Value - __state.Value).ToString()
                     : "unknown";
@@ -469,7 +452,6 @@ namespace SteamP2PFriends.Patches
         }
 
         // ============= 5. 客机 Receive 入口：ReceiveZombieStates（周期状态） =============
-        // v0.2.3.29 返修：使用 int? count，未知值输出 unknown
         [HarmonyPrefix]
         [HarmonyPatch(typeof(ZombieManager), "ReceiveZombieStates")]
         public static void ReceiveZombieStates_Prefix()
@@ -529,7 +511,6 @@ namespace SteamP2PFriends.Patches
         }
 
         /// <summary>
-        /// v0.2.3.29 返修（Codex §5.1.2）：使用真实一维 ZombieManager.regions[bound] 安全读取精确 count。
         /// vanilla L35: public static ZombieRegion[] regions => _regions;
         /// vanilla L676: ZombieRegion region = regions[bound];
         /// vanilla L679: count = region.zombies.Count
@@ -578,7 +559,6 @@ namespace SteamP2PFriends.Patches
         }
 
         /// <summary>
-        /// v0.2.3.29 返修：使用真实一维 ZombieManager.regions 迭代读取全局总数。
         /// 返回 int?：null 表示未知，调用方必须输出 "unknown"。
         /// 注意：totalCount 为全局总数，非特定 bound 精确落地数。
         /// </summary>

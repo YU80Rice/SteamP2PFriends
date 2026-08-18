@@ -7,7 +7,6 @@ using UnityEngine;
 namespace SteamP2PFriends.Patches
 {
     /// <summary>
-    /// v0.2.3.27 P0-A 决定性诊断（Codex 第 7 节 P0-A + 静态审计返修）：
     /// ItemManager 世界同步链路五段证据诊断。
     ///
     /// 五段证据闭环：
@@ -17,17 +16,9 @@ namespace SteamP2PFriends.Patches
     ///   4. 客机 Receive 入口：ReceiveItem / ReceiveItems
     ///   5. Receive 后状态/拒绝门控：ItemManager.regions[x,y].isNetworked before/after
     ///
-    /// v0.2.3.27-P0-A 返修（Codex 静态审计 NO-GO）：
-    ///   - P0-2：新增 VerifyRegistration，identity-based 自检（owner + MethodInfo 双重验证，
     ///     容忍同 owner 的其他 patch 共存）
-    ///   - P0-3：补齐 askItems Prefix（真实发送入口）
-    ///   - P0-4：改读 player.movement.loadedRegions[x,y].isItemsLoaded，不再反射不存在的 isItemsLoaded 静态字段
-    ///   - P0-5：ReceiveItem Prefix 读取 Regions.checkSafe + regions[x,y].isNetworked before；
     ///           Postfix 记录 after + 落地结果
-    ///   - P1-1：onRegionUpdated 使用 TryAcquirePlayerQuota（玩家级配额）
-    ///   - P1-4：Loopback transport 改用精确 FullName 常量相等比较
     ///
-    /// v0.2.3.27-P0-A 第二轮返修（Codex 第三轮 GO 复审非阻断修正）：
     ///   - ReceiveItem wasAccepted 语义澄清：仅证明包通过 checkSafe + isNetworked 门控并进入
     ///     pendingInstantiations 待实例化流程，不直接证明物品最终已在世界中可见（实例化由
     ///     后续 PlayerLoop/garbageCollector 阶段异步消费 pendingInstantiations 队列完成）。
@@ -47,10 +38,8 @@ namespace SteamP2PFriends.Patches
     {
         private const string PointPrefix = "[WorldSyncDiag/Item]";
 
-        // P1-4：精确 FullName 常量（Loopback transport 类型判断）
         private const string LoopbackTransportFullName = "SDG.NetTransport.Loopback.TransportConnection_Loopback";
 
-        // v0.2.3.27-P0-A 冒烟中止返修（Codex P0-R8）：vanilla 目标完整参数类型表，
         // 由 RegisterManual 与 VerifyRegistration 共用，避免两套容易漂移的局部数组。
         //   - onRegionUpdated(Player, byte, byte, byte, byte, byte, ref bool)
         //     最后一个 canIncrementIndex 是 ref bool -&gt; typeof(bool).MakeByRefType()
@@ -104,17 +93,8 @@ namespace SteamP2PFriends.Patches
             && ReceiveItemPrefixRegistered && ReceiveItemPostfixRegistered && ReceiveItemsPrefixRegistered;
 
         /// <summary>
-        /// v0.2.3.27-P0-A 手动登记（Codex 外部审计裁决 P0-R1～R8）：
         /// 6 个 hook 精确、幂等的 identity-based 手动登记。
         ///
-        /// P0-R1：所有 vanilla 目标使用完整参数类型解析（类级别静态字段 VanillaXxxParamTypes）。
-        /// P0-R2：identity-based 幂等，登记前后均按 original + owner + Patch MethodInfo + Prefix/Postfix 类型精确验证。
-        /// P0-R3：每个 hook 独立 try/catch（由 RegisterIdentityPatch 内部处理），一个失败不阻止其他。
-        /// P0-R4：ReceiveItem 的 Prefix 和 Postfix 分别精确登记、分别核验。
-        /// P0-R5：RegisterManual 返回值不绕过 VerifyRegistration，最终权威仍是 6 个 VerifyRegistration 聚合至 DiagnosticBuildValid。
-        /// P0-R6：仅新增手动登记，不修改 Prefix/Postfix 诊断行为，不实施 P0-B/P0-C 功能修复。
-        /// P0-R7：登记前预检查静默，登记后/最终验证失败才输出 Error。
-        /// P0-R8：RegisterManual 与 VerifyRegistration 共用类级别 VanillaXxxParamTypes。
         /// </summary>
         public static bool RegisterManual(Harmony harmony)
         {
@@ -185,11 +165,8 @@ namespace SteamP2PFriends.Patches
         }
 
         /// <summary>
-        /// P0-2：精确注册自检。由 SteamP2PFriendsPlugin.VerifyCriticalPatches 调用。
         /// 失败时聚合到 DiagnosticBuildValid=false。
         ///
-        /// v0.2.3.27-P0-A 返修（Codex TC-S6）：identity-based，检查"我们自己的 Prefix/Postfix MethodInfo 是否在 patches 列表中"。
-        /// v0.2.3.27-P0-A 冒烟中止返修（Codex P0-R8）：复用类级别 VanillaXxxParamTypes 完整参数表，
         /// 与 RegisterManual 使用同一套 Type[]，避免两套容易漂移的局部数组。
         /// </summary>
         public static bool VerifyRegistration()
@@ -304,14 +281,10 @@ namespace SteamP2PFriends.Patches
                     return;
                 }
 
-                // v0.2.3.35 P0-B-4 诊断（Codex 第二十三次双机测试外部审计 §4.2）：
-                //   输出 regions[x,y].items.Count，用于判断 P0-B-3 预生成是否生效。
                 //   U3-SDK 溯源：
                 //     - D:/Agent-工作目录/U3-SDK/Assets/Runtime/Assembly-CSharp/Unturned/Managers/ItemManager.cs:59 `public static ItemRegion[,] regions`
                 //     - D:/Agent-工作目录/U3-SDK/Assets/Runtime/Assembly-CSharp/Unturned/Managers/ItemRegion.cs:15 `public List<ItemData> items`
                 //   预期：
-                //     - P0-B-3 生效：items_count > 0（预生成已填充）
-                //     - P0-B-3 未生效：items_count == 0（askItems 发送空包，客机看不见地面物品）
                 int itemsCount = -1;
                 try
                 {
@@ -371,7 +344,6 @@ namespace SteamP2PFriends.Patches
         }
 
         // ============= 4. 客机 Receive 入口：ReceiveItem =============
-        // P0-5：Prefix 读取 safe + isNetworked before；Postfix 读取 after + 落地结果
         [HarmonyPrefix]
         [HarmonyPatch(typeof(ItemManager), "ReceiveItem")]
         public static void ReceiveItem_Prefix(
@@ -424,7 +396,6 @@ namespace SteamP2PFriends.Patches
         {
             try
             {
-                // v0.2.3.27-P0-A 返修（Codex TC-S6）：vanilla 逻辑为
                 //   if (!Regions.checkSafe(x, y)) return;     // 拒绝
                 //   if (!regions[x, y].isNetworked) return;   // 拒绝（丢弃）
                 //   pendingInstantiations.Insert(...)         // 接收
@@ -484,7 +455,6 @@ namespace SteamP2PFriends.Patches
 
         /// <summary>
         /// 读取 player.movement.loadedRegions[x,y].isItemsLoaded。
-        /// 失败时返回 "unknown/..."，不得用 false 代替（Codex P0-4）。
         /// </summary>
         private static string ReadRegionItemsLoaded(Player player, byte x, byte y)
         {

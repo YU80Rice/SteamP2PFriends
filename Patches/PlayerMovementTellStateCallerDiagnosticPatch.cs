@@ -9,9 +9,7 @@ using UnityEngine;
 namespace SteamP2PFriends.Patches
 {
     /// <summary>
-    /// v0.2.3.20 D-Vis-15 诊断 patch（PlayerMovement.tellState 调用方追踪）。
     ///
-    /// 审计授权：外部审计报告-第十三次双机测试-v0.2.3.19-修订版验收 §9.2 授权实施。
     ///
     /// 目标（审计要求）：
     ///   - Postfix PlayerMovement.tellState，记录 new StackTrace().ToString() 前 5 帧
@@ -179,7 +177,6 @@ namespace SteamP2PFriends.Patches
         }
 
         /// <summary>
-        /// v0.2.3.20 P1：客机断开时清除节流状态。
         /// </summary>
         public static void OnClientDisconnected()
         {

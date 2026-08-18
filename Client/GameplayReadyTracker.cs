@@ -5,19 +5,16 @@ using System.Collections.Generic;
 namespace SteamP2PFriends.Client
 {
     /// <summary>
-    /// v0.2.3.3 第四次审计 P0-A 修复（Codex 外部审计）：
     ///   - 8 位信号语义为 LocalComponentsInitialized（不单独宣称 GameplayReady）。
     ///   - 完成时回调 P2PJoinManager.NotifyLocalComponentsInitialized，仅记录信号。
     ///   - P2PJoinManager 仅记录 AcceptedAndLocalComponentsInitialized 阶段，不命名真实 GameplayReady。
     ///   - 真实 GameplayReady 由原生 LoadingUI / loading flag 决定，不由插件宣告。
-    ///   - v0.2.3.3 P0-A：删除 serverBoundsHistory 引用（该字段为服务器端专属，客机永远为 null）。
     ///
     /// 跟踪的 8 个关键组件（Player.InitializePlayer 调用顺序，Player.cs:1625-1633）：
     ///   bit 0: PlayerClothing.InitializePlayer
     ///   bit 1: PlayerInventory.InitializePlayer
     ///   bit 2: PlayerLife.InitializePlayer
     ///   bit 3: PlayerStance.InitializePlayer
-    ///   bit 4: PlayerMovement.InitializePlayer（P0-J 修正后不抛 NRE 才能到这一步）
     ///   bit 5: PlayerLook.InitializePlayer
     ///   bit 6: PlayerInteract.InitializePlayer
     ///   bit 7: PlayerInput.InitializePlayer

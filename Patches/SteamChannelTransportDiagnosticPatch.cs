@@ -9,7 +9,6 @@ using UnityEngine;
 namespace SteamP2PFriends.Patches
 {
     /// <summary>
-    /// v0.2.3.18 D-Vis-8 诊断 patch（客机模型可见性差异诊断 - 传输层）。
     ///
     /// D-Vis-8：SteamChannel.GetOwnerTransportConnection Postfix（双端，含节流）
     ///   - U3-SDK 路径：SteamChannel.cs:111
@@ -113,7 +112,6 @@ namespace SteamP2PFriends.Patches
         }
 
         /// <summary>
-        /// v0.2.3.18 P1：客机断开时清除节流状态。
         /// </summary>
         public static void OnClientDisconnected()
         {

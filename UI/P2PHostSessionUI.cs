@@ -9,8 +9,6 @@ using UnityEngine;
 namespace SteamP2PFriends.UI
 {
     // =====================================================================
-    // Stage 7-4 v3 LeftResponsive + v4 ScrollIntegrity + v5 ExactRenderSnapshot + v6 AtomicSnapshotCommit
-    //   v6 [P1-A/B/C/D]：重建事务完整 try 边界（Clear+SetContentHeight+Build+Capture+Restore 全在 try 内）；
     //     失败 best-effort 清半建行 + 收敛 scroll 内容高度 + 失效对应表快照（不重抛，下帧重试）；
     //     双表隔离（pending 失败只失效 pending）；IApprovalRebuildSurface 抽象便于故障注入测试。
     //   审批内核（P2PJoinApprovalService）独立运行；CSteamID 唯一授权键。
@@ -83,7 +81,6 @@ namespace SteamP2PFriends.UI
 
     internal enum EApprovalTab { Pending, Whitelist }
 
-    // v6 [P1-E]：最小 scroll 表面抽象，便于测试项目注入故障（ContentSizeOffset setter 抛异常）
     internal interface IApprovalRebuildSurface
     {
         Vector2 ContentSizeOffset { get; set; }
@@ -113,7 +110,6 @@ namespace SteamP2PFriends.UI
         private static readonly List<ApprovalRow> _approvalRows = new List<ApprovalRow>();
         private static readonly List<WhitelistRow> _whitelistRows = new List<WhitelistRow>();
 
-        // v5 [P1-A/B/C]：精确渲染快照（逐项比较，无 hash 碰撞）
         private static readonly List<PendingRenderEntry> _renderedPending = new List<PendingRenderEntry>(16);
         private static readonly List<WhitelistRenderEntry> _renderedWhitelist = new List<WhitelistRenderEntry>(16);
         private static bool _hasPendingSnapshot;
@@ -289,7 +285,6 @@ namespace SteamP2PFriends.UI
             _hasWhitelistSnapshot = true;
         }
 
-        // v6 [P1-B/C]：单表失效
         internal static void InvalidatePendingRenderSnapshot()
         {
             _renderedPending.Clear();
@@ -391,7 +386,6 @@ namespace SteamP2PFriends.UI
                 RefreshHeaderAndPendingCount();
                 RefreshActiveScrollView(layout);
             }
-            // Stage 7-5 [指令 C]：persona 到达后仅更新 NameLabel.Text，不重建/重绑按钮/不改 CSteamID
             RefreshVisiblePersonaText();
             if (_statusLabel != null)
             {
@@ -400,7 +394,6 @@ namespace SteamP2PFriends.UI
             }
         }
 
-        /// <summary>Beta-5 P1：逐行 try/catch；仅文本更新，不 Clear/Build/Capture snapshot；不改 row.SteamId。</summary>
         private static void RefreshVisiblePersonaText()
         {
             if (!_testBypassThreadAssert) ThreadUtil.assertIsGameThread();
@@ -455,7 +448,6 @@ namespace SteamP2PFriends.UI
             scroll.ScaleContentToWidth = true;
         }
 
-        // ===== v6 [P1-A] scroll 操作（全部在事务 try 内调用）=====
 
         private static void SetContentHeight(IApprovalRebuildSurface scroll, int shownCount, ApprovalListRenderPlan plan)
         {
@@ -488,7 +480,6 @@ namespace SteamP2PFriends.UI
                    !float.IsNaN(value.y) && !float.IsInfinity(value.y);
         }
 
-        // v6 [P1-D]：catch 后 best-effort 收敛 scroll 内容高度（异常吞掉，保留 snapshot-invalid）
         private static void BestEffortResetScrollContent(IApprovalRebuildSurface scroll)
         {
             if (scroll == null) return;
@@ -592,7 +583,6 @@ namespace SteamP2PFriends.UI
             ActivateTab(EApprovalTab.Whitelist);
         }
 
-        // v6 [P1-C]：Approve 同时失效两表（批准后 pending 变 + 白名单变）；Reject 仅 pending；Remove 仅 whitelist
         private static void OnClickedApprove(ISleekElement button)
         {
             if (!_testBypassThreadAssert) ThreadUtil.assertIsGameThread();
@@ -672,7 +662,6 @@ namespace SteamP2PFriends.UI
             else RefreshWhitelistPanel(layout);
         }
 
-        // v6 [P1-A/B/D]：完整事务 try（Clear+SetContentHeight+Build+Capture+Restore 全在 try 内）；
         //   失败 best-effort 清半建行 + 收敛 scroll + 失效 pending 快照（不重抛，下帧重试）
         internal static void RefreshApprovalPanel(ApprovalPanelLayout layout)
         {
@@ -990,7 +979,6 @@ namespace SteamP2PFriends.UI
         private struct PendingRenderEntry { public ulong SteamId; public int AttemptCount; }
         private struct WhitelistRenderEntry { public ulong SteamId; public string Tag; }
 
-        // v6 [P1-E]：ISleekScrollView -> IApprovalRebuildSurface adapter
         private readonly struct SleekScrollSurface : IApprovalRebuildSurface
         {
             private readonly ISleekScrollView _scroll;

@@ -7,18 +7,15 @@ using System.Reflection;
 namespace SteamP2PFriends.Patches
 {
     /// <summary>
-    /// v0.2.3.3 第四次审计 P0-A 修复（Codex 外部审计）：
     ///   - 8 位信号语义为 LocalComponentsInitialized（不单独宣称 GameplayReady）。
     ///   - Postfix 三重门控：!Provider.isServer && ReferenceEquals(player, Player.LocalPlayer) && player.channel?.IsLocalPlayer == true。
     ///   - 完成回调 P2PJoinManager.NotifyLocalComponentsInitialized 仅记录信号，不推进 GameplayReady。
-    ///   - v0.2.3.3 P0-A：删除 serverBoundsHistory 引用（该字段为服务器端专属，客机永远为 null）。
     ///
     /// 跟踪 8 个组件（Player.InitializePlayer 调用顺序，Player.cs:1625-1633）：
     ///   bit 0: PlayerClothing
     ///   bit 1: PlayerInventory
     ///   bit 2: PlayerLife
     ///   bit 3: PlayerStance
-    ///   bit 4: PlayerMovement（P0-J 修正后不抛 NRE）
     ///   bit 5: PlayerLook
     ///   bit 6: PlayerInteract
     ///   bit 7: PlayerInput
@@ -97,7 +94,6 @@ namespace SteamP2PFriends.Patches
 
         public static void Postfix(object __instance)
         {
-            // 第四次审计 P0-2 修复：三重门控，仅客机本地 Player 推进 bitmask
             // 房主侧不参与（房主 Player.IsLocalPlayer=true 但 Provider.isServer=true 会被门控拦截）
             if (Provider.isServer) return;
 

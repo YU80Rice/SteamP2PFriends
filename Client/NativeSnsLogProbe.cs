@@ -8,25 +8,8 @@ using UnityEngine;
 namespace SteamP2PFriends.Client
 {
     /// <summary>
-    /// v0.2.3.6 P0-5/P1：受控原生 SNS 调试输出（Codex 第六次审计返修）。
-    ///
-    /// v0.2.3.6 修订（审计 v0.2.3.5 验收报告 P0-A/Medium-2/P1）：
-    ///   - 原生 SNS 回调可能在 Steam 内部线程触发；v0.2.3.5 直接在回调内执行正则 + 写日志，
-    ///     无线程隔离/限流/丢弃计数。v0.2.3.6 改为有界队列 + 主线程 Update 批量脱敏落盘。
-    ///   - 队列容量上限：MaxQueueEntries=1024；单帧 drain 上限：MaxDrainPerFrame=64。
-    ///   - 队列满时丢弃新条目并累加 dropped 计数；每 10s 输出一次 dropped 总数。
-    ///   - 脱敏入口统一为 SnsDiagnosticUtil.RedactSensitiveNetworkData（P0-A 共享入口）。
-    ///   - 新增 IsEnabled/EnableFailed 公开属性供 P0-C 启动自检阻断门使用。
-    ///
-    /// 设计目标（审计第五次审计 P0-5）：
-    ///   - 通过 SteamNetworkingUtils.SetDebugOutputFunction 注册 C# 委托，接收 SNS 原生日志回调。
-    ///   - 仅诊断构建/受控测试启用，由配置开关控制。
-    ///   - 不修改 ICE/SDR/认证配置。
-    ///
-    /// 严格禁止：
-    ///   - 在正式服或公开服启用
-    ///   - 落盘未脱敏的 IP/候选地址
-    ///   - 修改任何 SNS 状态
+    /// 可选的原生 Steam Networking Sockets 诊断输出。
+    /// 回调线程只做有界入队；主线程负责脱敏和写日志。该探针从不改变网络配置或 P2P 功能门控。
     /// </summary>
     public static class NativeSnsLogProbe
     {
@@ -51,15 +34,13 @@ namespace SteamP2PFriends.Client
         /// <summary>当前是否已成功启用原生 SNS 日志回调。</summary>
         public static bool IsEnabled => _enabled;
 
-        /// <summary>Enable() 是否曾抛非"Steamworks 未初始化"异常（用于 P0-C 阻断门）。</summary>
+        /// <summary>Enable() 是否曾抛出非"Steamworks 未初始化"异常。</summary>
         public static bool EnableFailed => _enableFailed;
 
-        /// <summary>v0.2.3.9 新增：是否正在等待 Steamworks 初始化后重试 Enable。</summary>
         public static bool WaitingForSteamworks => _waitingForSteamworks;
 
         /// <summary>
         /// 启用受控 SNS 原生日志。仅在 RouteDiagnostics && VerboseLog 同时为 true 时启用。
-        /// v0.2.3.9 修复：BepInEx 插件 Awake 时 Steamworks 可能尚未初始化（SteamAPI.Init 由
         ///   vanilla Provider.Initialize 在场景加载时调用）。若 SetDebugOutputFunction 抛
         ///   "Steamworks is not initialized" 异常，不视为永久失败，而是标记 _waitingForSteamworks=true，
         ///   由 Plugin.Update 调用 RetryEnableIfSteamworksReady() 在 Steamworks 初始化后重试。
@@ -68,8 +49,6 @@ namespace SteamP2PFriends.Client
         {
             if (!routeDiagnostics || !verboseLog)
             {
-                RoleLogger.Info("[Shared]",
-                    $"[Diag] [D-NativeSns] NativeSnsLogProbe NOT enabled (routeDiagnostics={routeDiagnostics} verboseLog={verboseLog})");
                 return;
             }
 
@@ -95,7 +74,6 @@ namespace SteamP2PFriends.Client
             }
             catch (Exception ex)
             {
-                // v0.2.3.9 修复：检测 "Steamworks is not initialized" 异常，标记为等待重试
                 //   BepInEx 插件 Awake 时 Steamworks 可能尚未初始化（SteamAPI.Init 由 vanilla
                 //   Provider.Initialize 在场景加载时调用）。此时不视为永久失败，由 Plugin.Update
                 //   在 Steamworks 初始化后重试 Enable。
@@ -121,7 +99,6 @@ namespace SteamP2PFriends.Client
         }
 
         /// <summary>
-        /// v0.2.3.9 新增：由 Plugin.Update 调用，在 Steamworks 初始化后重试 Enable。
         /// 仅当 _waitingForSteamworks=true 时尝试重试。重试成功后 _enabled=true。
         /// 超过 MaxRetryAttempts 次仍未成功时设 _enableFailed=true（永久失败）。
         /// </summary>
@@ -184,7 +161,6 @@ namespace SteamP2PFriends.Client
 
         /// <summary>
         /// 原生 SNS 调试输出回调（可能在 Steam 内部线程触发）。
-        /// v0.2.3.6 P1：回调内只做最小复制 + 入队；脱敏/落盘由主线程 Tick 负责。
         /// </summary>
         private static void OnNativeSnsDebugOutput(ESteamNetworkingSocketsDebugOutputType nType, IntPtr pszMsg)
         {

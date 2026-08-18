@@ -5,7 +5,6 @@ using UnityEngine;
 namespace SteamP2PFriends.Client
 {
     /// <summary>
-    /// v0.2.3.3 P0-B：原生加载门快照（Codex 第四次审计外部审计报告）。
     ///
     /// 设计原则：
     ///   - 只读：不写任何 vanilla loading flag，不关闭 LoadingUI，不修改 lastLoading。
@@ -38,6 +37,8 @@ namespace SteamP2PFriends.Client
         /// </summary>
         internal static void Dump(string reason)
         {
+            if (!PluginLogPolicy.IsVerboseDiagnosticsEnabled) return;
+
             try
             {
                 float realtime = Time.realtimeSinceStartup;
@@ -122,6 +123,12 @@ namespace SteamP2PFriends.Client
         /// </summary>
         internal static void StartPostAcceptedTracking()
         {
+            if (!PluginLogPolicy.IsVerboseDiagnosticsEnabled)
+            {
+                _acceptedTrackingActive = false;
+                return;
+            }
+
             _acceptedTime = Time.realtimeSinceStartup;
             _acceptedTrackingActive = true;
             _lastPeriodicDumpTime = _acceptedTime;
@@ -140,7 +147,7 @@ namespace SteamP2PFriends.Client
         /// </summary>
         internal static void Tick()
         {
-            if (!_acceptedTrackingActive) return;
+            if (!PluginLogPolicy.IsVerboseDiagnosticsEnabled || !_acceptedTrackingActive) return;
 
             float now = Time.realtimeSinceStartup;
             float elapsed = now - _acceptedTime;

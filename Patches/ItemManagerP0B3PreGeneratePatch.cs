@@ -9,7 +9,6 @@ using UnityEngine;
 namespace SteamP2PFriends.Patches
 {
     /// <summary>
-    /// v0.2.3.34 P0-B-3 远端客机区域物品预生成（Codex 第二十二次双机测试外部审计 §4.2 授权实施）：
     ///
     /// 根因（U3-SDK ItemManager.cs:920-952 onLevelLoaded + 1028-1031 onRegionUpdated step 5）：
     ///
@@ -32,7 +31,6 @@ namespace SteamP2PFriends.Patches
     ///   - 客机日志：ReceiveItems #1-20/20（客机收到空包）
     ///   - 用户反馈：客机在非主机城镇地面物品不刷新
     ///
-    /// 修复方案（Codex §4.2 方案 A 授权实施）：
     ///   Transpiler 替换 L941 的 Dedicator.IsDedicatedServer 调用
     ///   为 ListenRegionSyncEligibility.IsDedicatedOrP2PHost() 调用。
     ///
@@ -55,7 +53,6 @@ namespace SteamP2PFriends.Patches
     ///   - 不全局伪造 Dedicator.IsDedicatedServer
     ///   - 不修改 generateItems 实现
     ///   - 不修改 onRegionUpdated step 5 的懒加载逻辑（IsLocalPlayer 门控保留）
-    ///   - 与 ItemManagerRegionSyncPatch（P0-B step 5 askItems 门控）共存无冲突
     ///   - 与 ItemManagerWorldSyncDiagnosticPatch 共存无冲突
     ///
     /// 性能影响：
@@ -338,7 +335,6 @@ namespace SteamP2PFriends.Patches
         }
 
         /// <summary>
-        /// v0.2.3.34 P0-B-3 远端客机区域物品预生成 Transpiler 主实现。
         /// 替换 vanilla onLevelLoaded 中的 Dedicator.get_IsDedicatedServer() 调用
         /// 为 ListenRegionSyncEligibility.IsDedicatedOrP2PHost()。
         ///
@@ -410,7 +406,6 @@ namespace SteamP2PFriends.Patches
         }
 
         /// <summary>
-        /// v0.2.3.35 P0-B-4 诊断日志（Codex 第二十三次双机测试外部审计 §4.2 授权实施）：
         ///
         /// 在 vanilla onLevelLoaded 返回后输出诊断信息，用于判断：
         ///   1. onLevelLoaded 是否被触发
@@ -418,9 +413,7 @@ namespace SteamP2PFriends.Patches
         ///   3. LevelItems.spawns.Count（generateItems 的输入数据是否就绪）
         ///   4. ItemManager.regions 是否已初始化
         ///
-        /// Codex §4.2 原话：
         ///   "在 ItemManager.onLevelLoaded 方法入口或 Transpiler 中增加强制日志：
-        ///    [P0-B-3/Item] onLevelLoaded invoked level={level} IsDedicatedOrP2PHost={ListenRegionSyncEligibility.IsDedicatedOrP2PHost()}；
         ///    在 generateItems 循环前后记录 LevelItems.spawns.Count 与耗时。"
         ///
         /// U3-SDK 溯源：
@@ -464,10 +457,6 @@ namespace SteamP2PFriends.Patches
 
                 _postfixStopwatchStart = 0f;
 
-                // v0.2.3.37 P0-B-6：在 onLevelLoaded Postfix 中尝试触发全地图 generateItems
-                //   Codex 第二十五次审计 §4.1 方案 A 授权实施
-                //   25th 测试证明 P0-B-5 在 OnServerHosted 时机过早（LevelItems.spawns=null）
-                //   P0-B-6 在 onLevelLoaded Postfix 中检测 spawns 就绪后触发，绕过时序问题
                 try
                 {
                     ItemManagerP0B6RegenerateOnLevelLoadedPatch.TryRegenerateOnLevelLoaded(level);

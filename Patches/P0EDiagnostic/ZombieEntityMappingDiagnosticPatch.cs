@@ -11,14 +11,7 @@ using UnityEngine;
 namespace SteamP2PFriends.Patches.P0EDiagnostic
 {
     /// <summary>
-    /// v0.2.3.38 P0-E-1 阶段 2 诊断补丁（Codex 阶段 2 外部审计 P0-R1~R7 返修版）：
     ///
-    /// v0.2.3.38 阶段 2 第一版被 Codex 外部审计 NO-GO，关键 Findings：
-    ///   P0-R1: onBoundUpdated 使用多重 __state_x 参数无效
-    ///   P0-R2: sendZombieAlive/ReceiveZombieAlive 签名错误（额外 newMove/newIdle 不存在）
-    ///   P0-R4: 未实现 identity-based 自检（仅 harmony.Patch 后 return true）
-    ///   P0-R5: sessionId 从未变化，无 Reset 回调
-    ///   P1-R6: DP-1~DP-4 共用单一节流时间，相互吞日志
     ///
     /// 返修后 7 个诊断点（DP-1..DP-7）：
     ///   DP-1 SendZombies_Write Postfix：主机写包后采样
@@ -29,13 +22,9 @@ namespace SteamP2PFriends.Patches.P0EDiagnostic
     ///   DP-6 sendZombieDead + sendZombieAlive Prefix：主机发起事件
     ///   DP-7 ReceiveZombieDead + ReceiveZombieAlive Prefix：客机接收事件
     ///
-    /// P0-R2 修正后签名（U3-SDK 实际）：
     ///   sendZombieAlive(Zombie, byte, byte, byte, byte, byte, byte, Vector3, byte) - 9 参数
     ///   ReceiveZombieAlive(byte, ushort, byte, byte, byte, byte, byte, byte, Vector3, byte) - 10 参数
     ///
-    /// P0-R4: 所有 DP 使用 WorldSyncDiagnosticCore.RegisterIdentityPatch
-    /// P0-R5: 静态构造注册 RegisterSessionResetCallback，递增 _sessionId + 清空节流缓存
-    /// P1-R6: 节流按 (dpId, bound) 独立；初始快照 DP-1/DP-2 每次都输出（不参与周期节流）
     /// </summary>
     public static class ZombieEntityMappingDiagnosticPatch
     {
@@ -50,17 +39,14 @@ namespace SteamP2PFriends.Patches.P0EDiagnostic
         public static bool DP6_SendZombieDead_Registered { get; private set; }
         public static bool DP7_ReceiveZombieDead_Registered { get; private set; }
 
-        // v0.2.3.38 4B 编码（Codex 第三十四次审计 F1）：DP-8.7 ZombieRegion.destroy Prefix
         // 登记与 owner 精确自检状态分离，二者任一失败都 fail-closed。
         public static bool DP8_7_Destroy_Registered { get; private set; }
         public static bool DP8_7_Destroy_OwnerVerified { get; private set; }
         public static string DP8_7_Destroy_OwnerSummary { get; private set; } = "<unverified>";
 
-        // v0.2.3.38 4B 编码（Codex 第三十四次审计 C2）：为 Plugin 启动汇总提供只读出口。
         // Plugin 不得再次反射读取 _reflectionFailed，只能读取此属性。
         public static bool ReflectionFailed => _reflectionFailed;
 
-        // v0.2.3.38 4B 编码（Codex 第三十四次审计 F1/F3）：fail-closed 聚合
         // - 登记成功不等于 owner 精确自检成功
         // - 反射失败时所有 Zombie DP（含 DP-8.7）不登记
         // - 任一登记或 owner 自检失败都令 DiagnosticBuildValid=false
@@ -72,23 +58,18 @@ namespace SteamP2PFriends.Patches.P0EDiagnostic
             && DP8_7_Destroy_Registered && DP8_7_Destroy_OwnerVerified
             && !_reflectionFailed;
 
-        // ===== Sampling limits (Codex Finding 5) =====
         private const int MAX_SAMPLE_PER_BOUND = 10;
         private const float PERIODIC_THROTTLE = 5.0f;
 
-        // ===== Per-DP+bound throttle (P1-R6) =====
         private static readonly Dictionary<(int dp, byte bound), float> _lastPeriodicLog
             = new Dictionary<(int dp, byte bound), float>();
 
-        // ===== Session state (P0-R5) =====
         private static int _sessionId = 0;
         public static int CurrentSessionId => _sessionId;
 
         // ===== Per-bound sample index cache =====
         private static readonly Dictionary<byte, int[]> _sampleIndices = new Dictionary<byte, int[]>();
 
-        // ===== Reflection cache (P2-R8 performance) =====
-        // P0-R9 修复（阶段 3A 实机冒烟发现）：PlayerCountInRegion 是 property（带 get/internal set），
         // 不是 field。原 AccessTools.Field 返回 null 导致 CacheReflection fail-closed，
         // 7 个 DP 全部未登记 -> DiagnosticBuildValid=false -> P2P 入口被阻断。
         // U3-SDK 证据：U3-SDK/Assets/Runtime/Assembly-CSharp/Unturned/Managers/ZombieRegion.cs:358-387
@@ -200,7 +181,6 @@ namespace SteamP2PFriends.Patches.P0EDiagnostic
 
             // DP-6 sendZombieDead + sendZombieAlive Prefix
             System.Type[] sendZombieDeadParams = { typeof(Zombie), typeof(Vector3), typeof(ERagdollEffect) };
-            // P0-R2 修正：sendZombieAlive 实际签名 9 参数（无 newMove/newIdle）
             System.Type[] sendZombieAliveParams = {
                 typeof(Zombie), typeof(byte), typeof(byte), typeof(byte),
                 typeof(byte), typeof(byte), typeof(byte), typeof(Vector3), typeof(byte)
@@ -214,7 +194,6 @@ namespace SteamP2PFriends.Patches.P0EDiagnostic
 
             // DP-7 ReceiveZombieDead + ReceiveZombieAlive Prefix
             System.Type[] receiveZombieDeadParams = { typeof(byte), typeof(ushort), typeof(Vector3), typeof(ERagdollEffect) };
-            // P0-R2 修正：ReceiveZombieAlive 实际签名 10 参数（无 newMove/newIdle）
             System.Type[] receiveZombieAliveParams = {
                 typeof(byte), typeof(ushort), typeof(byte), typeof(byte),
                 typeof(byte), typeof(byte), typeof(byte), typeof(byte),
@@ -227,7 +206,6 @@ namespace SteamP2PFriends.Patches.P0EDiagnostic
                 receiveZombieAliveParams, nameof(Hooks.ReceiveZombieAlivePrefix),
                 HarmonyPatchType.Prefix, "DP-7-ReceiveZombieAlive-Prefix");
 
-            // v0.2.3.38 4B 编码（Codex 第三十四次审计授权）：
             //   DP-8.7 ZombieRegion.destroy Prefix - 销毁前快照（zombies.Count/nav/isNetworked/PlayerCountInRegion/remoteOccupants）
             //   唯一新增 Hook，仅读取销毁前状态，不修改 Region 生命周期、Zombie 列表、PlayerCount 或 isNetworked。
             //   C1：MethodInfo 必须从实际嵌套 Hooks 类解析（不得照抄外层类型示例）。
@@ -252,7 +230,6 @@ namespace SteamP2PFriends.Patches.P0EDiagnostic
         }
 
         /// <summary>
-        /// v0.2.3.38 4B 编码 C1：DP-8.7 专属登记方法。
         /// 目标类型为 ZombieRegion（非 ZombieManager），故不复用 RegisterOne。
         /// MethodInfo 必须从实际嵌套 Hooks 类解析，不得照抄外层类型示例。
         /// </summary>
@@ -278,7 +255,6 @@ namespace SteamP2PFriends.Patches.P0EDiagnostic
         }
 
         /// <summary>
-        /// v0.2.3.38 4B 编码 F1：DP-8.7 owner 精确自检。
         /// 使用精确 MethodInfo 比较，允许同一 owner 的其他合法 Prefix 共存。
         /// owner 自检失败必然令 AllRegistrationsSucceeded=false。
         /// </summary>
@@ -438,7 +414,6 @@ namespace SteamP2PFriends.Patches.P0EDiagnostic
             try
             {
                 Vector3 p = z.transform.position;
-                // v0.2.3.38 4B 编码 R3：扩展实体签名包含 shirt/pants/hat/gear，
                 // 支持 4C "机长服装 vs 平民服装" 分析。
                 // U3-SDK Zombie.cs:67-74 公开字段：id(ushort)/type(byte)/speciality(EZombieSpeciality)/
                 //   shirt(byte)/pants(byte)/hat(byte)/gear(byte)；:362 isDead(bool)
@@ -453,7 +428,6 @@ namespace SteamP2PFriends.Patches.P0EDiagnostic
         }
 
         /// <summary>
-        /// v0.2.3.38 4B 编码 R3：格式化指定 Region 的稳定索引实体快照（最多 maxSamples 个）。
         /// 复用 GetSampleIndices 与 FormatEntitySignature，不新增反射、不新增 Tick。
         /// </summary>
         private static string FormatRegionEntitySnapshot(byte bound, int totalCount, List<Zombie> zombies, int maxSamples = 10)
@@ -477,7 +451,6 @@ namespace SteamP2PFriends.Patches.P0EDiagnostic
             return $"count={totalCount} {sb}";
         }
 
-        // P1-R6: 按 dpId + bound 独立节流
         private static bool ShouldLogPeriodic(int dpId, byte bound)
         {
             float now = Time.realtimeSinceStartup;
@@ -499,7 +472,6 @@ namespace SteamP2PFriends.Patches.P0EDiagnostic
             try { return (int)_playerCountInRegionProperty.GetValue(region, null); } catch { return -1; }
         }
 
-        // ====================== State Struct (P0-R1) ======================
 
         private struct OnBoundUpdatedState
         {
@@ -523,8 +495,6 @@ namespace SteamP2PFriends.Patches.P0EDiagnostic
                 try
                 {
                     if (!Provider.isServer) return;
-                    // P1-R6: 初始快照每次输出（不参与周期节流）改为前 2 次必输出，之后周期节流
-                    // Codex Finding 6: 初始快照不应被周期日志吞掉
                     if (!ShouldLogPeriodic(1, bound)) return;
 
                     ZombieRegion region = null;
@@ -582,7 +552,6 @@ namespace SteamP2PFriends.Patches.P0EDiagnostic
                             int count = region.zombies?.Count ?? 0;
                             if (count == 0) continue;
 
-                            // P1-R6: 按 (dp=2, bound) 独立节流
                             if (!ShouldLogPeriodic(2, bound)) continue;
 
                             int[] indices = GetSampleIndices(bound, count);
@@ -703,7 +672,6 @@ namespace SteamP2PFriends.Patches.P0EDiagnostic
                 }
             }
 
-            // DP-5: onBoundUpdated Prefix - 保存 before 状态（P0-R1: 单一 struct __state）
             // 签名：private void onBoundUpdated(Player player, byte oldBound, byte newBound)
             internal static void OnBoundUpdatedPrefix(Player player, byte oldBound, byte newBound,
                 out OnBoundUpdatedState __state)
@@ -766,7 +734,6 @@ namespace SteamP2PFriends.Patches.P0EDiagnostic
                     }
                     catch { }
 
-                    // v0.2.3.38 4B 编码 R3：oldBound 销毁前稳定索引实体快照（最多 10 个）。
                     // 复用 GetSampleIndices + FormatEntitySignature，不新增 Tick/反射。
                     string oldBoundSnapshot = "<unavailable>";
                     try
@@ -836,7 +803,6 @@ namespace SteamP2PFriends.Patches.P0EDiagnostic
                     }
                     catch { }
 
-                    // v0.2.3.38 4B 编码 R3：newBound 生成后稳定索引实体快照（最多 10 个）。
                     string newBoundSnapshot = "<unavailable>";
                     try
                     {
@@ -889,7 +855,6 @@ namespace SteamP2PFriends.Patches.P0EDiagnostic
             }
 
             // DP-6: sendZombieAlive Prefix - 主机端发起事件
-            // P0-R2 修正签名：sendZombieAlive(Zombie, byte, byte, byte, byte, byte, byte, Vector3, byte) - 9 参数（无 newMove/newIdle）
             internal static void SendZombieAlivePrefix(Zombie zombie, byte newType, byte newSpeciality,
                 byte newShirt, byte newPants, byte newHat, byte newGear,
                 Vector3 newPosition, byte newAngle)
@@ -957,7 +922,6 @@ namespace SteamP2PFriends.Patches.P0EDiagnostic
             }
 
             // DP-7: ReceiveZombieAlive Prefix - 客机端接收事件
-            // P0-R2 修正签名：ReceiveZombieAlive(byte, ushort, byte, byte, byte, byte, byte, byte, Vector3, byte) - 10 参数（无 newMove/newIdle）
             internal static void ReceiveZombieAlivePrefix(byte reference, ushort id, byte newType, byte newSpeciality,
                 byte newShirt, byte newPants, byte newHat, byte newGear,
                 Vector3 newPosition, byte newAngle)
@@ -1002,7 +966,6 @@ namespace SteamP2PFriends.Patches.P0EDiagnostic
                 }
             }
 
-            // v0.2.3.38 4B 编码（Codex 第三十四次审计授权，唯一新增 Hook）：
             //   DP-8.7 ZombieRegion.destroy Prefix - 销毁前快照
             // 签名：public void destroy()，无参数（instance method on ZombieRegion）
             // 严格只读（F4 + R6：不新增反射，公开成员直接读取）：

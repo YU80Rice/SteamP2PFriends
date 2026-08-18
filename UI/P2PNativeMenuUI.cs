@@ -9,8 +9,6 @@ using UnityEngine;
 namespace SteamP2PFriends.UI
 {
     // =====================================================================
-    // Stage 7-3 v3 原生 P2P 多级菜单（Codex 接管蓝图 v3 §3.4）
-    // v3 P0-UI-U3DS-EAGER-01 + P0-UI-PLAYER-CONTAINER-LIFECYCLE-02 修复：
     //   - CanTouchClientUi 守卫（U3DS 不创建）
     //   - parent identity 生命周期（MenuUI.container 变更 -> Destroy + 重建）
     //   - ThreadUtil.assertIsGameThread 显式断言
@@ -119,7 +117,6 @@ namespace SteamP2PFriends.UI
                 _boundParent.AddChild(_roleMenuContainer);
                 BuildRoleMenu(_roleMenuContainer);
 
-                // Stage 7-8: legacy standalone SteamID page is intentionally not created.
                 // Joining is exclusively routed through vanilla MenuPlayConnectUI.
 
                 _created = true;
@@ -860,7 +857,6 @@ namespace SteamP2PFriends.UI
             }
         }
 
-        // ===== Stage 7-5 v3 客机等待审批 UI（parent identity 生命周期）=====
 
         private static ISleekElement _waitBoundParent;
         private static ISleekBox _waitBox;
@@ -887,7 +883,6 @@ namespace SteamP2PFriends.UI
         }
 
         /// <summary>
-        /// v3 [P0-WAIT-UI-PARENT-LIFECYCLE-03]：确保等待 UI 可见且绑定到当前 parent。
         /// parent 变更 -> 先 Detach 旧视图，再在新 parent 上重建。返回 false = 不可见/不可取消。
         /// </summary>
         internal static bool EnsureApprovalWaitVisible(ulong hostSteamId, int seconds, System.Action cancel)

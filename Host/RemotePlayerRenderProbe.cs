@@ -6,16 +6,11 @@ using UnityEngine;
 namespace SteamP2PFriends.Host
 {
     /// <summary>
-    /// v0.2.3.13 新增（Codex 第八次审计第六节 P0-F）：
     /// 房主看不到客机模型问题的独立 High 诊断。
     ///
-    /// v0.2.3.13 返修（Codex v0.2.3.13 外部审计报告 P0-3 + P0-4 + 4.2 节）：
-    ///   - P0-3：新增 OnClientDisconnected + ResetAll，按断线/新会话清除 _playerStates。
-    ///   - P0-4：采样窗口延长到 60 秒，采用 1s/3s/10s/30s/60s 时间点 + 状态变化驱动模式。
     ///   - 区分 Renderer.enabled 与 renderer.gameObject.activeInHierarchy，输出"真正可渲染的 active+enabled 数"。
     ///   - 保留 activeSelf/activeInHierarchy/layer/position/scale/animator/movement/stance。
     ///
-    /// v0.2.3.18 D-Vis-6 扩展（审计放行实施 - 客机模型可见性差异诊断）：
     ///   - 新增 SkinnedMeshRenderer 数量 + enabled 数量 + sharedMaterial 是否为 null
     ///   - 新增 PlayerClothing 三槽状态（shirt/pants/hat public 属性 + shirtQuality/pantsQuality/hatQuality public 字段）
     ///   - 目的：定位 H3 假设（模型加载分支跳过）+ H1 假设（Clothing 状态同步失效）
@@ -28,12 +23,10 @@ namespace SteamP2PFriends.Host
     ///   该消息正是 vanilla 用来"告诉既有玩家新玩家已连接"的路径，
     ///   与房主无法看到客机模型在时间上吻合，应视为 High，不能静默跳过。
     ///
-    /// 严格禁止（Codex 第六节）：
     ///   - 不静默吞掉 PlayerConnected loopback NotSupportedException
     ///   - 不直接调用 ClientMessageHandler_PlayerConnected.ReadMessage（会重复 Provider.addPlayer）
     ///   - 不宣称该异常与模型不可见无关
     ///
-    /// 实施策略（v0.2.3.13 返修）：
     ///   只读 RemotePlayerRenderProbe 周期性采样（每 0.5 秒检查一次）所有远程 SteamPlayer 的渲染状态。
     ///   每个远程玩家首次出现时立即采样，然后在 1s/3s/10s/30s/60s 时间点各采样一次（共 6 次固定采样）。
     ///   若检测到 active/renderer/position 等状态变化，额外输出一条 state-changed 采样日志。
@@ -71,6 +64,12 @@ namespace SteamP2PFriends.Host
 
         public static void Initialize()
         {
+            if (!PluginLogPolicy.IsVerboseDiagnosticsEnabled)
+            {
+                _initialized = false;
+                return;
+            }
+
             _initialized = true;
             RoleLogger.Info("[Shared]",
                 "[RemotePlayerRenderProbe] 已初始化（0.5s 检查间隔，采样时间点 0/1/3/10/30/60s + 状态变化驱动）");
@@ -84,10 +83,8 @@ namespace SteamP2PFriends.Host
         }
 
         /// <summary>
-        /// v0.2.3.13 返修 P0-3：Provider.onClientDisconnected 回调。
         /// 清除已不在 Provider.clients 中的玩家状态，重连后重新开始采样。
         ///
-        /// v0.2.3.13 第二次返修（NRE 修复）：
         ///   - SteamPlayerID 重载 ==/!= 运算符但未判空，`sp.playerID != null` 会 NRE。
         ///     根因：operator ==(a, b) 实现为 `a.steamID == b.steamID`，b=null 时 `null.steamID` NRE。
         ///   - 改用 `?.` + `?? 0UL` 模式，绕开运算符陷阱。
@@ -139,7 +136,6 @@ namespace SteamP2PFriends.Host
         }
 
         /// <summary>
-        /// v0.2.3.13 返修 P0-3：开新服/停服时清除所有状态。
         /// </summary>
         public static void ResetAll()
         {
@@ -154,7 +150,7 @@ namespace SteamP2PFriends.Host
         /// </summary>
         public static void Tick()
         {
-            if (!_initialized) return;
+            if (!PluginLogPolicy.IsVerboseDiagnosticsEnabled || !_initialized) return;
             if (!Provider.isServer || !Level.isLoaded) return;
 
             _tickAccumulator += Time.deltaTime;
@@ -173,7 +169,6 @@ namespace SteamP2PFriends.Host
 
         private static void SampleAllRemotePlayers()
         {
-            // v0.2.3.13 NRE 修复：Provider.clients 在 shutdown 期间可能为 null
             if (Provider.clients == null) return;
 
             // 收集所有远程 SteamPlayer（非本地玩家）
@@ -185,7 +180,6 @@ namespace SteamP2PFriends.Host
             {
                 if (sp == null) continue;
 
-                // v0.2.3.13 NRE 修复：SteamPlayerID 重载 != 但未判空，用 ?. 绕开
                 ulong steamId = sp.playerID?.steamID.m_SteamID ?? 0UL;
                 if (steamId == 0UL) continue;
 
@@ -235,7 +229,6 @@ namespace SteamP2PFriends.Host
                 // 仅采样远程玩家（非房主自连）
                 if (sp.player.channel == null || sp.player.channel.IsLocalPlayer) continue;
 
-                // v0.2.3.13 NRE 修复：SteamPlayerID 重载 != 但未判空，用 ?. 绕开
                 ulong steamId = sp.playerID?.steamID.m_SteamID ?? 0UL;
                 if (steamId == 0UL) continue;
 
@@ -334,7 +327,6 @@ namespace SteamP2PFriends.Host
             snap.ActiveInHierarchy = go.activeInHierarchy;
             snap.Layer = go.layer;
 
-            // v0.2.3.13 NRE 修复：transform 在 MonoBehaviour 上理论上不会为 null，但 shutdown 期间防御
             try
             {
                 snap.Position = player.transform.position;
@@ -368,7 +360,6 @@ namespace SteamP2PFriends.Host
                 }
             }
 
-            // v0.2.3.18 D-Vis-6 扩展：SkinnedMeshRenderer 采样
             snap.SkinnedMeshRendererTotal = 0;
             snap.SkinnedMeshRendererEnabled = 0;
             snap.SkinnedMeshRendererMaterialNull = 0;
@@ -391,7 +382,6 @@ namespace SteamP2PFriends.Host
                 RoleLogger.Warn("[Host]", $"[RemotePlayerRenderProbe] SkinnedMeshRenderer 采样异常: {ex.Message}");
             }
 
-            // v0.2.3.18 D-Vis-6 扩展：PlayerClothing 槽位状态
             // shirt/pants/hat 是 public 属性，shirtQuality/pantsQuality/hatQuality 是 public 字段
             snap.ClothShirt = 0;
             snap.ClothPants = 0;
@@ -419,7 +409,6 @@ namespace SteamP2PFriends.Host
                 RoleLogger.Warn("[Host]", $"[RemotePlayerRenderProbe] PlayerClothing 采样异常: {ex.Message}");
             }
 
-            // v0.2.3.13 NRE 修复：animator/movement/stance 属性 getter 在 shutdown 期间可能抛 NRE
             try { snap.AnimatorPresent = player.animator != null; }
             catch (System.Exception) { snap.AnimatorPresent = false; }
 
@@ -458,12 +447,10 @@ namespace SteamP2PFriends.Host
             if (prev.MovementPresent != curr.MovementPresent) return true;
             if (prev.StancePresent != curr.StancePresent) return true;
 
-            // v0.2.3.18 D-Vis-6 扩展：SkinnedMeshRenderer 状态变化
             if (prev.SkinnedMeshRendererTotal != curr.SkinnedMeshRendererTotal) return true;
             if (prev.SkinnedMeshRendererEnabled != curr.SkinnedMeshRendererEnabled) return true;
             if (prev.SkinnedMeshRendererMaterialNull != curr.SkinnedMeshRendererMaterialNull) return true;
 
-            // v0.2.3.18 D-Vis-6 扩展：Clothing 槽位变化
             if (prev.ClothShirt != curr.ClothShirt) return true;
             if (prev.ClothPants != curr.ClothPants) return true;
             if (prev.ClothHat != curr.ClothHat) return true;
@@ -486,7 +473,6 @@ namespace SteamP2PFriends.Host
             Vector3 pos = snap.Position;
             Vector3 scale = snap.Scale;
 
-            // v0.2.3.18 D-Vis-6 扩展：在原日志后追加 SMR 与 Clothing 字段
             RoleLogger.Info("[Host]",
                 $"[RemotePlayerRenderProbe] steamId={steamId} sample={sampleCount} reason={reason} " +
                 $"elapsed={elapsed:F2}s totalClients={totalClients} " +
@@ -523,12 +509,10 @@ namespace SteamP2PFriends.Host
             public string MovementState;
             public bool StancePresent;
 
-            // v0.2.3.18 D-Vis-6 扩展：SkinnedMeshRenderer 采样
             public int SkinnedMeshRendererTotal;
             public int SkinnedMeshRendererEnabled;
             public int SkinnedMeshRendererMaterialNull;
 
-            // v0.2.3.18 D-Vis-6 扩展：PlayerClothing 槽位状态
             // shirt/pants/hat 是 public 属性（背后 thirdClothes.shirt/pants/hat 字段）
             // shirtQuality/pantsQuality/hatQuality 是 public 字段
             public bool ClothPresent;

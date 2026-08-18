@@ -141,6 +141,8 @@
     <Compile Include="Stage7_6Tests.cs" />
     <Compile Include="Stage7_8Tests.cs" />
     <Compile Include="HarmonyMetadataTests.cs" />
+    <Compile Include="HarmonyCompatibilityAuditTests.cs" />
+    <Compile Include="LoggingPolicyTests.cs" />
     <Compile Include="ExplicitDnsDirectIpTests.cs" />
     <Compile Include="Stage10WorldStatusBroadcastTests.cs" />
     <Compile Include="AuthorityGenerationGateTests.cs" />

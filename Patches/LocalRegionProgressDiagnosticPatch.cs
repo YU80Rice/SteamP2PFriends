@@ -8,7 +8,6 @@ using UnityEngine;
 namespace SteamP2PFriends.Patches
 {
     /// <summary>
-    /// v0.2.3.3 P0-D：本地区域推进诊断（Codex 第四次审计外部审计报告）。
     ///
     /// 设计目标：
     ///   - 记录本地 PlayerInput.FixedUpdate 与 PlayerMovement.simulate 是否持续运行。
@@ -31,13 +30,11 @@ namespace SteamP2PFriends.Patches
         private static byte _lastRegionX = 255;
         private static byte _lastRegionY = 255;
 
-        // v0.2.3.6 P1-2：P0-D 假阳性修复 - 带宽限期状态机（Codex 第六次审计 Medium-1 返修）
         //   - _areaPendingStartTime：首次进入"Area pending"状态的时间（0f 表示未进入）
         //   - _areaPendingUpgraded：是否已升级为 breakpoint warning
         //   - AreaPendingGraceSeconds：带宽限期（15s），超过才升级 warning
         //   - 升级条件：Area pending >= 15s + LoadingUI.isBlocked=true + Level.isLoadingArea=true 共同成立
         //   - 房主自连基线测试中 region=(255,255) 在 ~10s 后自行推进，证明短暂 Area pending 是正常加载阶段
-        //   - v0.2.3.5 的 10s 阈值恰在基线恢复边界，可能误报；v0.2.3.6 改为 15s + LoadingUI 守卫
         private static float _areaPendingStartTime;
         private static bool _areaPendingUpgraded;
         private const float AreaPendingGraceSeconds = 15f;
@@ -193,7 +190,6 @@ namespace SteamP2PFriends.Patches
                     $"Level.isLoadingStructures={Level.isLoadingStructures}");
 
                 // 若 Player 三项都已 false 而 Level.isLoadingArea 独自保持 true，
-                // v0.2.3.6 P1-2：带宽限期状态机（审计 v0.2.3.5 验收报告 Medium-1）
                 //   - 短暂 Area pending 只记 Info，不立即升级为 breakpoint warning。
                 //   - 升级条件：Area pending 持续 >= 15s + LoadingUI.isBlocked=true + Level.isLoadingArea=true
                 //     共同成立（审计要求三条件 AND）。
@@ -215,7 +211,6 @@ namespace SteamP2PFriends.Patches
                     else
                     {
                         float pendingElapsed = now - _areaPendingStartTime;
-                        // v0.2.3.6 P1-2：升级条件增加 LoadingUI.isBlocked 守卫
                         bool loadingUiBlocked = false;
                         try { loadingUiBlocked = LoadingUI.isBlocked; } catch { }
 

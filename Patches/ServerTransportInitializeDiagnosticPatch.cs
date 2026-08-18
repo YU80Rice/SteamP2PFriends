@@ -10,7 +10,6 @@ using System.Reflection;
 namespace SteamP2PFriends.Patches
 {
     /// <summary>
-    /// v0.2.2.2 诊断 patch：ServerTransport_SteamNetworkingSockets.Initialize。
     ///
     /// 目的：第一次双机测试发现 SteamUserP2PRedirectPatch 的 12 个 Prefix 日志从未打印，
     /// 怀疑 Harmony patch 登记了但运行时未执行。本 patch 直接拦截 Initialize 方法，
@@ -23,7 +22,6 @@ namespace SteamP2PFriends.Patches
     /// 如果 Prefix 日志打印但 SteamUserP2PRedirectPatch 的 Prefix 日志没打印，
     /// 说明 Harmony patch 了 Steamworks.NET 方法但运行时调用绕过了 detour。
     ///
-    /// v0.2.2.2 审计修复：
     ///   - A-1：HSteamListenSocket.ToString() 返回数字字符串，Invalid=0 的 ToString 为 "0"，
     ///     原先的 p2pVal.ToString() != "Invalid" 判断永远为 true，导致 handle=0 被误报为已创建。
     ///     改为强类型比较 socket != HSteamListenSocket.Invalid，并输出数值 handle 和 valid 标志。

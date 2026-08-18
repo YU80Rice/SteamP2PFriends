@@ -10,28 +10,23 @@ using UnityEngine;
 namespace SteamP2PFriends.Host
 {
     /// <summary>
-    /// Stage 10 (v2): world-status broadcast projection layer for the plugin listen-host world.
     ///
     /// Product semantics (指令 A): every event broadcasts ONE system message to all players in
     /// the current world — host + approved guests + still-quarantined guests — via the unified
     /// sender with fromPlayer=null / toPlayer=null / useRichTextFormatting=false. It NEVER sends
     /// only to the event subject. The quarantine 5s countdown stays a targeted private message.
     ///
-    /// v2 P1-01: victim identity is fail-closed — ResolveVictimIdentity NEVER falls back to
     /// PlayerLife.deathKiller (that is the killer, not the victim). Unknown owner -> Nil -> no
     /// broadcast and no cooldown pollution. Listen-host self identity is accepted only after an
     /// exact Player/PlayerLife match against Player.LocalPlayer.
     ///
-    /// v2 P1-02: a session-scoped ConnectedProjectionState records players only after a real
     /// AlreadyApproved/Activated promotion result. Approval atomically promotes Quarantined ->
     /// Approved. Disconnect consumes the registered state; a rejected player (no registered state)
     /// disconnects silently (never "approved player left").
     ///
-    /// v2 P1-05: Initialize returns an explicit activation result; master=false never subscribes;
     /// ActivationValid aggregates into DiagnosticBuildValid; the plugin logs "initialized" only on
     /// success.
     ///
-    /// v2 P1-06: disconnect cleanup runs unconditionally (independent of config switches and send
     /// outcome), removing death cooldown + projection state + approval generation for that SteamID.
     /// Approval-once dedup is keyed by the current connection generation, so revoke/rejoin/approve
     /// broadcasts a second independent approval.
@@ -84,14 +79,12 @@ namespace SteamP2PFriends.Host
         // killer gate is deterministically testable on the console (no Unity client list).
         internal static Func<CSteamID, string> _testClientNameResolver;
         internal static bool _testPlainPresentation;
-        // v2 P1-07: injectable death-event subscribe/unsubscribe adapter so tests COUNT real
         // add/remove calls (console CLR cannot touch the PlayerLife static event).
         internal static Action<System.Action<PlayerLife, EDeathCause, ELimb, CSteamID>> _testSubscribeDeath;
         internal static Action<System.Action<PlayerLife, EDeathCause, ELimb, CSteamID>> _testUnsubscribeDeath;
         internal static Action<System.Action<PlayerLife, EDeathCause, ELimb, CSteamID>> _testSubscribeLegacyDeath;
         internal static Action<System.Action<PlayerLife, EDeathCause, ELimb, CSteamID>> _testUnsubscribeLegacyDeath;
         internal static Func<bool> _testGameThreadReady;
-        // v3 P1-09: full-AbI chat send adapter. Production passes the exact same arguments it
         // would give ChatManager.serverSendMessage; tests inject a fake and assert every parameter.
         internal delegate void P2PWorldChatSend(
             string text, Color color, SteamPlayer fromPlayer, SteamPlayer toPlayer,
@@ -104,7 +97,6 @@ namespace SteamP2PFriends.Host
         internal static string LastCapturedIconUrl = "sentinel";
         internal static bool LastCapturedRichText = true;
 
-        // ===== Production chat sender (v3 P1-09): the single production path to ChatManager =====
 
         /// <summary>
         /// Production adapter that calls the real ChatManager.serverSendMessage with the exact
@@ -129,7 +121,6 @@ namespace SteamP2PFriends.Host
         private static int _sessionEpoch;
         private static readonly object Sync = new object();
 
-        // v2 P1-05: activation result. true only after a successful subscribe (or master=false
         // deliberate no-op which is itself "valid": nothing to subscribe because disabled).
         private static bool _activationValid;
         private static EWorldBroadcastActivationState _activationState =
@@ -142,7 +133,6 @@ namespace SteamP2PFriends.Host
         // per-player death cooldown (指令 G)
         private static readonly Dictionary<ulong, float> _lastDeathBroadcastAt =
             new Dictionary<ulong, float>();
-        // v2 P1-02/P1-06: session-scoped connection projection state.
         private static readonly Dictionary<ulong, EConnectionProjectionState> _connectionState =
             new Dictionary<ulong, EConnectionProjectionState>();
         // global rate window (指令 G, shared by all kinds in the unified sender)
@@ -158,7 +148,6 @@ namespace SteamP2PFriends.Host
         }
 
         /// <summary>
-        /// v2 P1-02: a player's projected connection status for the CURRENT session. Registered
         /// only after a real promotion result (AlreadyApproved -> Approved, Activated ->
         /// Quarantined). Rejected players are never registered, so their disconnect is silent.
         /// </summary>
@@ -467,7 +456,6 @@ namespace SteamP2PFriends.Host
                 if (!MasterEnabled || !DeathsEnabled) return;
                 if (sender == null) return;
 
-                // P1-01: victim identity is the owner's SteamID ONLY. If unavailable, return Nil
                 // (no fallback to PlayerLife.deathKiller, which is the killer).
                 ResolveVictimIdentity(sender, out CSteamID victimId, out string victimName);
 
@@ -505,7 +493,6 @@ namespace SteamP2PFriends.Host
         }
 
         /// <summary>
-        /// Stage 10 v5: fallback entry from the authoritative doDamage commit observer. The public
         /// onPlayerDied event remains the preferred source; both sources converge here and the
         /// existing per-victim cooldown prevents duplicate announcements.
         /// </summary>
@@ -553,7 +540,6 @@ namespace SteamP2PFriends.Host
                 RoleLogger.Info("[Host]", "[WorldBroadcast] death suppressed gate=config");
                 return;
             }
-            // P1-01: Nil/invalid victim -> NO broadcast, NO cooldown write (never pollute).
             if (victimId == CSteamID.Nil || !victimId.IsValid())
             {
                 RoleLogger.Warn("[Host]", "[WorldBroadcast] death suppressed gate=victim-invalid");
@@ -588,7 +574,6 @@ namespace SteamP2PFriends.Host
         }
 
         /// <summary>
-        /// v3 (Codex v3 directive §4): the reliable-killer gate. Returns a safe display name ONLY
         /// when ALL of the following hold; otherwise null (the selected slot's WithoutKiller is
         /// used). Never displays a SteamID, never guesses via persona network, never treats
         /// Provider.server as a player.
@@ -859,11 +844,9 @@ namespace SteamP2PFriends.Host
                     projected = EConnectionProjectionState.Quarantined;
                     break;
                 default:
-                    // P1-02: rejected players are NOT registered -> their disconnect is silent.
                     return;
             }
 
-            // P1-02: register projection state BEFORE broadcasting so a disconnect can consume it.
             lock (Sync)
             {
                 _connectionState[id.m_SteamID] = projected;
@@ -888,7 +871,6 @@ namespace SteamP2PFriends.Host
                 if (!MasterEnabled || !JoinLeaveEnabled) return;
                 if (steamId == CSteamID.Nil || !steamId.IsValid()) return;
 
-                // P1-06: approval dedup is per-CONNECTION-GENERATION, not per-session. The
                 // connection projection state IS the generation: it was cleared on disconnect, so a
                 // revoke/rejoin/approve gets a fresh broadcast. Within the SAME connection, repeated
                 // approval is suppressed by checking the state transition (Quarantined -> Approved).
@@ -955,7 +937,6 @@ namespace SteamP2PFriends.Host
         /// 指令 C/D: called from Plugin.OnEnemyDisconnectedHandler BEFORE quarantine cleanup.
         /// Consumes an expected-departure marker (suppresses the ordinary "left" message); otherwise
         /// broadcasts LeftApproved / LeftBeforeApproval based ONLY on the registered projection
-        /// state. A rejected player (no projection) disconnects silently. P1-06: cleanup is
         /// unconditional.
         /// </summary>
         internal static void OnPlayerDisconnected(SteamPlayer player)
@@ -975,7 +956,6 @@ namespace SteamP2PFriends.Host
             }
         }
 
-        /// <summary>Testable disconnect core (指令 C/D + P1-02 + P1-06).</summary>
         internal static void OnPlayerDisconnectedCore(CSteamID id, string displayName)
         {
             if (id == CSteamID.Nil || !id.IsValid()) return;
@@ -987,7 +967,6 @@ namespace SteamP2PFriends.Host
             {
                 state = _connectionState.TryGetValue(sid, out EConnectionProjectionState s)
                     ? s : EConnectionProjectionState.None;
-                // P1-06: unconditional per-player cleanup happens FIRST (independent of config and
                 // of whether a message is sent).
                 _connectionState.Remove(sid);
                 _lastDeathBroadcastAt.Remove(sid);
@@ -1005,7 +984,6 @@ namespace SteamP2PFriends.Host
                 return;
             }
 
-            // P1-02: only a REGISTERED projection broadcasts. Rejected players (state None) are silent.
             EWorldBroadcastKind kind;
             switch (state)
             {

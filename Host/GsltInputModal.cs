@@ -6,14 +6,12 @@ using System;
 namespace SteamP2PFriends.Host
 {
     /// <summary>
-    /// GSLT 令牌输入模态（简化版，迁移自 LaunchP2PHostManager v2.11.0）。
     ///
     /// 调用时机：用户点击"多人联机"按钮，且 BepInEx 配置中 GSLT_Login_Token 为空时。
     /// 双步流程：
     ///   第一步（输入面板）：32 位 GSLT Token 输入框 + 【确认并保存】 + 【跳过（匿名启动）】
     ///   第二步（风险警告）：警告文本 + 【取消】 + 【确认匿名启动】
     ///
-    /// v0.2 简化：仅实现 IMGUI 版本（与 SteamIdInputModal 一致），Glazier 集成版后续迭代。
     /// </summary>
     public static class GsltInputModal
     {

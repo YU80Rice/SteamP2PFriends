@@ -6,7 +6,6 @@ using System.Reflection;
 namespace SteamP2PFriends.Patches
 {
     /// <summary>
-    /// v0.2.3.18 D-Vis-3/4 诊断 patch 合集（客机模型可见性差异诊断）。
     ///
     /// D-Vis-3：PlayerInput.ReceiveSimulateMispredictedInputs Prefix（双端）
     ///   - U3-SDK 路径：PlayerInput.cs:1353

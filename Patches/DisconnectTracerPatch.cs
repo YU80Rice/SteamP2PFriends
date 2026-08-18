@@ -7,9 +7,7 @@ using System.Reflection;
 namespace SteamP2PFriends.Patches
 {
     /// <summary>
-    /// v0.2.3.5 P1-C + P0-2：vanilla Provider.RequestDisconnect(string) Prefix + Postfix。
     ///
-    /// v0.2.3.5 修订（审计第五次审计 P0-2）：
     ///   - 增加 Prefix：在 workshop timeout 触发、ClientTransport teardown 之前
     ///     读取客户端 connection handle 的状态（state、endReason、endDebug、flags 等）。
     ///   - 保留 Postfix：记录 vanilla 调用方传入的 reason。
@@ -39,7 +37,6 @@ namespace SteamP2PFriends.Patches
         }
 
         /// <summary>
-        /// v0.2.3.5 P0-2：在 vanilla 处理 reason 之前，先抓取一次客户端 SNS 连接快照。
         /// vanilla 调用栈可能在 RequestDisconnect 后立即触发 ClientTransport teardown，
         /// 一旦 teardown 完成即 handle 失效。Prefix 是唯一可靠时机。
         /// </summary>

@@ -13,7 +13,6 @@ using UnityEngine;
 namespace SteamP2PFriends.Patches
 {
     /// <summary>
-    /// Beta-5 P0-GROUP-STATE-SYNC-01 的只读诊断运行时。
     /// 不写 groupID/rank，不调用 ServerAssignToGroup/ReceiveGroupState/leaveGroup。
     /// </summary>
     internal static class P2PGroupStateProbeRuntime

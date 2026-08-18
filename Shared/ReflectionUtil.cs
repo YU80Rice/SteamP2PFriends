@@ -8,8 +8,6 @@ namespace SteamP2PFriends.Shared
     /// <summary>
     /// 缓存式反射工具（对齐原版 SteamP2PFriends ReflectionUtil.cs）。
     ///
-    /// v0.2 合并方案：直接移植原版 237 行版本，保留 Dictionary 缓存机制。
-    /// 相比 v0.1.0 的 AccessTools 薄封装，原版缓存版在频繁反射调用场景下性能更好。
     /// </summary>
     internal static class ReflectionUtil
     {

@@ -6,6 +6,31 @@
 
 本项目从 `0.2.3.56` 开始在此记录面向用户的发布变更。更早的实验、审计与双机测试历史保留在 `AUDIT_CHECKLIST.md` 与本地 `.audit` 归档中。
 
+## v0.2.3.61-beta.2 - 2026-08-18
+
+> ✅ **Beta 2 公开预发布版**：面向 SteamUser P2P listen-host 的本地多人联机。双端手动测试归档 `Beta2-P2P-AHost-20260818-1300` 的 `evidence-summary.json` 为 `AllOK=true`。
+
+### Changed
+
+- 插件、Assembly 与文件版本更新为 `0.2.3.61`；发布标识为 `v0.2.3.61-beta.2`。
+- 生产默认关闭详细日志和 Steam Networking Sockets 路由诊断；详细日志改用新的 `VerboseDiagnostics` 配置键，旧开发期 `VerboseLog=true` 不会在升级后重新启用探针。诊断探针不可用时仅降级日志，不再阻断可独立验证的 P2P 功能路径。
+- 移除历史 A/B `FullFixBuild` 开关。公开 Beta 始终登记和验证完整兼容性补丁集。
+- SteamPlayer 构造器补丁改为精确参数签名解析；游戏 ABI 不匹配时 fail-closed，不再按反射返回顺序选择构造器。
+- 编译工程的 Release 配置将警告视为错误，并以当前本机 Unturned/BepInEx 运行时引用进行构建审计。
+- Harmony 兼容性判定改为分级：本插件的关键 hook 缺失或重复仍 fail-closed；普通第三方观察型补丁仅记录告警；同目标 Transpiler，以及 P2P transport/auth/route 关键目标上的第三方 Prefix、Finalizer 或 Transpiler 会明确阻断。
+- 每次启动自检会扫描本插件实际注册的全部 Harmony 目标，并写出 `BepInEx/config/SteamP2PFriends/p2p-harmony-compatibility.json`，记录第三方 owner、目标、patch 类型、优先级和阻断决策。
+- 当前发布 DLL SHA-256：`3031C999138E850AED61636032B1580FAFBC6DC35B2F1F3D673262C43C67FC89`；自动化测试 `268/268 PASS`。
+- `TestLogs` 增加可选 CFG 快照/哈希辅助记录：保存双方 `com.yu80rice.steamp2pfriends.cfg`，并要求 `VerboseDiagnostics=false`、`RouteDiagnostics=false`。该工具不替代手动部署、手动日志归档或实际联机测试。
+
+### Removed
+
+- 删除依赖废弃 `ESteamPacket` 的 SteamChannel 发送诊断补丁及其断线清理路径。
+- 删除同账号 LAN 重复 SteamID 绕过及其死代码；公开 Beta 不再提供身份去重绕过。
+
+### 已知限制
+
+- 本版本不承诺与所有第三方 BepInEx、Harmony Transpiler、Doorstop 或原生注入工具共存。启动期原生注入失败必须同时提供 BepInEx preloader 日志，不能仅凭游戏内日志归因。
+
 ## 0.2.3.60 - 2026-08-13
 
 > ✅ **Beta 预发布版**：已完成 P2P listen-host 双机总回归（Case：`Final-Beta-Test-20260813-1300`）。

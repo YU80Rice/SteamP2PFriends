@@ -8,7 +8,6 @@ using UnityEngine;
 namespace SteamP2PFriends.Patches
 {
     /// <summary>
-    /// v0.2.3.36 P0-D-ESC：ESC 菜单暂停时保持 world Update 运行（Codex 第二十四次审计 §4.1 授权实施）。
     ///
     /// 背景：
     ///   24th 双机测试发现：主机 ESC 菜单时 timeScale=0.00 持续 33.32s（主机日志 L886-L988），
@@ -22,8 +21,6 @@ namespace SteamP2PFriends.Patches
     ///     - AnimalManager.Update 不刷新动物
     ///   listen host 是"主机客户端 + 服务器"同体，主机暂停 = 服务器暂停 = 客机世界停滞。
     ///
-    /// Codex 第二十四次审计 §2 Critical 项纠正：
-    ///   Agent 原 P0-D-ESC 方案目标 LevelManager.set_Paused 在 U3-SDK 中**不存在**。
     ///   真实 pause 逻辑在 PlayerUI.updatePauseTimeScale()（PlayerUI.cs:1724-1736）：
     ///     private void updatePauseTimeScale()
     ///     {
@@ -45,7 +42,6 @@ namespace SteamP2PFriends.Patches
     ///   - PlayerUI.cs:1728-1729 Time.timeScale = 0f; AudioListener.pause = true;
     ///   - PlayerUI.cs:1733-1734 Time.timeScale = 1f; AudioListener.pause = false;
     ///
-    /// 修复方案（Codex §4.1 Prefix 方案）：
     ///   Prefix patch PlayerUI.updatePauseTimeScale：
     ///   - 当 listen host + 有远端客机连接时，强制保持 Time.timeScale=1f + AudioListener.pause=false，
     ///     返回 false 跳过 vanilla pause 逻辑。
@@ -78,8 +74,6 @@ namespace SteamP2PFriends.Patches
         private const string TargetMethodName = "updatePauseTimeScale";
         private const string PatchPrefixName = nameof(UpdatePauseTimeScale_Prefix);
 
-        // v0.2.3.37 P0-D-ESC-2：Prefix 运行时诊断状态
-        //   Codex 第二十五次审计 §4.2 授权实施
         //   25th 测试 Prefix 自检通过但运行时未生效，需诊断日志验证
         private static int _prefixCallCount = 0;
         private static float _lastDiagLogTime = 0f;
@@ -225,8 +219,6 @@ namespace SteamP2PFriends.Patches
         ///   - 显式设置 timeScale=1，避免遗留的 0 状态（vanilla 之前可能已设为 0）
         /// </summary>
         /// <summary>
-        /// v0.2.3.37 P0-D-ESC-2：Prefix 入口增加运行时诊断日志（状态变化即时 + 每 5s 心跳）。
-        ///   Codex 第二十五次审计 §4.2 授权实施。
         ///   25th 测试 Prefix 自检通过但 timeScale=0.00 持续，无法从日志确定根因。
         ///
         /// 诊断逻辑：
@@ -249,7 +241,6 @@ namespace SteamP2PFriends.Patches
             bool menuActive = IsMenuUIActive();
             bool shouldIntervene = isP2PActive && hasRemote;
 
-            // v0.2.3.37 P0-D-ESC-2：状态变化时立即输出（Codex §4.2 Low 项补充）
             //   isNowPaused = menuActive && !shouldIntervene（即 vanilla 会触发 pause 的条件）
             bool isNowPaused = menuActive && !shouldIntervene;
             if (isNowPaused != _lastPauseActive)
@@ -261,7 +252,6 @@ namespace SteamP2PFriends.Patches
                     $"isNowPaused={isNowPaused} timeScale={Time.timeScale:F2}");
             }
 
-            // v0.2.3.37 P0-D-ESC-2：每 5s 心跳日志
             if (Time.realtimeSinceStartup - _lastDiagLogTime > 5f)
             {
                 _lastDiagLogTime = Time.realtimeSinceStartup;
@@ -329,8 +319,6 @@ namespace SteamP2PFriends.Patches
         }
 
         /// <summary>
-        /// v0.2.3.37 P0-D-ESC-2：检测 ESC 暂停菜单是否激活。
-        ///   Codex 第二十五次审计 §4.2 Low 项补充要求。
         ///
         /// U3-SDK 溯源：
         ///   D:/Agent-工作目录/U3-SDK/Assets/Runtime/Assembly-CSharp/Unturned/Player/PlayerUI.cs:1724-1736

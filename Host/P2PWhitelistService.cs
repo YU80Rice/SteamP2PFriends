@@ -10,9 +10,6 @@ using System.Security.Cryptography;
 namespace SteamP2PFriends.Host
 {
     // =====================================================================
-    // Stage 7-2-2 原生白名单服务（Codex 133rd PASS 授权实施）
-    // 蓝图：Codex-Blueprint-Stage7-2-2-NativeWhitelist-ImplementationCompile-v1-20260805.md
-    // 设计：Stage7-2-1-NativeWhitelistDesign-v1.md（v1.5 Codex 132nd 接管蓝图回填）
     // =====================================================================
     // 三个接口（seam three-piece set）：
     //   IWhitelistStore / IWhitelistRuntimeContext / IWhitelistDisconnectGateway
@@ -21,7 +18,6 @@ namespace SteamP2PFriends.Host
     // 一个进程内唯一 static 类：
     //   P2PWhitelistService
     //
-    // 静态门控（Codex 132nd §7.1）：
     //   - SteamWhitelist.* 原生调用仅在 NativeWhitelistStore
     //   - 零处访问 SteamWhitelist._list
     //   - Provider.disconnect() 仅在 NativeWhitelistDisconnectGateway
@@ -44,7 +40,6 @@ namespace SteamP2PFriends.Host
         void AssertGameThread();
         bool IsActiveP2PHost { get; }
         CSteamID LocalUser { get; }
-        // Stage 7-2-2 测试可行性：经 runtime 设置 Provider.isWhitelisted，使单元测试可用 fake 替代
         void SetWhitelisted(bool value);
     }
 
@@ -55,7 +50,6 @@ namespace SteamP2PFriends.Host
 
     // =====================================================================
     // 生产实现：NativeWhitelistStore
-    // 唯一封装 SteamWhitelist.* 原生调用的位置（Codex 132nd §7.1）
     // =====================================================================
 
     internal sealed class NativeWhitelistStore : IWhitelistStore
@@ -69,7 +63,6 @@ namespace SteamP2PFriends.Host
 
         public bool Remove(CSteamID steamId) => SteamWhitelist.unwhitelist(steamId);
 
-        // Codex 131st P0-WL-SNAPSHOT-API-01：经 public SteamWhitelist.list 深拷贝
         // 零处访问 private SteamWhitelist._list
         public List<SteamWhitelistID> Snapshot() => SteamWhitelist.list
             .Select(x => new SteamWhitelistID(x.steamID, x.tag, x.judgeID))
@@ -107,7 +100,6 @@ namespace SteamP2PFriends.Host
 
     // =====================================================================
     // 生产实现：NativeWhitelistDisconnectGateway
-    // Codex 132nd P0-WL-TERMINATION-SEAM-01：全项目白名单失败路径唯一 Provider.disconnect() 调用点
     // =====================================================================
 
     internal sealed class NativeWhitelistDisconnectGateway : IWhitelistDisconnectGateway
@@ -122,7 +114,6 @@ namespace SteamP2PFriends.Host
     }
 
     // =====================================================================
-    // P2PWhitelistService：进程内唯一 static 类（Codex 132nd P0-WL-SERVICE-OWNERSHIP-01）
     // =====================================================================
 
     internal static class P2PWhitelistService
@@ -265,7 +256,6 @@ namespace SteamP2PFriends.Host
             }
 
             CSteamID localUser = _runtime.LocalUser;
-            // P1-WL-LOCALUSER-VALIDATION-01（Codex 134th）：LocalUser 无效时拒绝，不 Snapshot/Save/Disconnect
             if (localUser == CSteamID.Nil || !localUser.IsValid())
             {
                 feedback = "房主 SteamID 无效";
@@ -297,7 +287,6 @@ namespace SteamP2PFriends.Host
                     return false;
                 }
 
-                // P0-WL-SNAPSHOT-THROW-01（Codex 134th）：Snapshot 在 try/catch 内，
                 // 失败走 Restore（若 snapshot 非 null）+ fault-latch + 锁外 disconnect
                 List<SteamWhitelistID> snapshot = null;
                 try
@@ -345,7 +334,6 @@ namespace SteamP2PFriends.Host
         }
 
         /// <summary>
-        /// 从白名单移除客机（蓝图 §2.1 + Codex 131st P1-WL-REMOVE-NOOP-01）：
         ///   拒绝 Nil/无效/self；
         ///   Snapshot -> Remove：Remove=false 是 no-op（不 Save、不 disconnect）；
         ///   Remove=true 后执行 Save -> Load -> !Contains(target)
@@ -371,7 +359,6 @@ namespace SteamP2PFriends.Host
             }
 
             CSteamID localUser = _runtime.LocalUser;
-            // P1-WL-LOCALUSER-VALIDATION-01（Codex 134th）：LocalUser 无效时拒绝，不 Snapshot/Save/Disconnect
             if (localUser == CSteamID.Nil || !localUser.IsValid())
             {
                 feedback = "房主 SteamID 无效";
@@ -396,7 +383,6 @@ namespace SteamP2PFriends.Host
                     return false;
                 }
 
-                // P0-WL-SNAPSHOT-THROW-01（Codex 134th）：Snapshot 在 try/catch 内，
                 // 失败走 Restore（若 snapshot 非 null）+ fault-latch + 锁外 disconnect
                 List<SteamWhitelistID> snapshot = null;
                 try
@@ -405,7 +391,6 @@ namespace SteamP2PFriends.Host
                     bool removed = _store.Remove(target);
                     if (!removed)
                     {
-                        // Codex 131st P1-WL-REMOVE-NOOP-01：合法 no-op
                         feedback = "条目已不在白名单中";
                         RoleLogger.Info("[Host]",
                             $"[P2P-WL] TryRemove no-op: target={target.m_SteamID} not in list");
@@ -472,7 +457,6 @@ namespace SteamP2PFriends.Host
             }
         }
 
-        /// <summary>Stage 7-6 U player-list decorator lookup. Authorization remains keyed only by CSteamID.</summary>
         internal static bool ContainsForUi(CSteamID target)
         {
             _runtime.AssertGameThread();

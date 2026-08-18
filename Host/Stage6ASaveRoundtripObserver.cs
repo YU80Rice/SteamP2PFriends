@@ -4,10 +4,8 @@ using System;
 
 namespace SteamP2PFriends.Host
 {
-    // v0.2.3.40 Stage 6A-1（Codex 83rd §3.1）：保存观察器
     //   仅观察原版 shutdown 保存；绝不调用 SaveManager.save()，不操作玩家身份或文件系统。
     //   所有公开入口仅在 Unity/Unturned 游戏主线程调用（ThreadUtil.assertIsGameThread）。
-    //   蓝图：Codex-Blueprint-Stage6A-P2P-U3DSParity-v1.3-20260801.md §3.1
     internal enum EStage6ASaveObservationState
     {
         Inactive,

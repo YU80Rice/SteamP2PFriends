@@ -79,7 +79,6 @@ namespace SteamP2PFriends.Patches
                 }
 
                 var parameters = new ServerConnectParameters(address, queryPort, connectionPort, password);
-                // Stage 9-2: single-port semantics. The entered port is both query and connection.
                 RoleLogger.Info("[Client]", "[DirectIP-SinglePort] connect " +
                     "address=" + address + " sharedPort=" + connectionPort +
                     " queryPort=" + queryPort + " connectionPort=" + connectionPort);
@@ -159,7 +158,6 @@ namespace SteamP2PFriends.Patches
         {
             if (!P2PClientUiEnvironment.CanTouchClientUi()) return;
 
-            // Stage 9-3: lazily create the explicit DNS direct-connect toggle in the vanilla
             // MenuPlayConnectUI layout (reuses this existing patch, no new constructor patch).
             ExplicitDnsDirectIpModeUI.EnsureCreated();
 
@@ -183,7 +181,6 @@ namespace SteamP2PFriends.Patches
             ISleekUInt16Field ipPort = MenuPlayConnectP2PRoutePatch.GetStaticField<ISleekUInt16Field>("portField");
             if (ipPort == null) return;
 
-            // Stage 9-3: explicit DNS mode hint when the toggle is enabled and a legal domain is present.
             if (ExplicitDnsDirectIpModeUI.IsEnabled &&
                 UnifiedJoinAddressClassifier.TryBuildExplicitDnsEndpoint(
                     hostField.Text, ipPort.Value, out _, out _))
@@ -198,7 +195,6 @@ namespace SteamP2PFriends.Patches
                 return;
             }
 
-            // Stage 9-2: single-port Direct-IP hint for numeric IPv4. Never auto-rewrite the port.
             if (!UnifiedJoinAddressClassifier.TryBuildDirectIpEndpoint(
                 hostField.Text, ipPort.Value, out _, out _, out _))
             {

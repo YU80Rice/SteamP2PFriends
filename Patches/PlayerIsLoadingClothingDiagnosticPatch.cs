@@ -6,7 +6,6 @@ using System.Reflection;
 namespace SteamP2PFriends.Patches
 {
     /// <summary>
-    /// v0.2.3.19 D-Vis-12 诊断 patch（客机模型可见性差异诊断 - Player.isLoadingClothing 生命周期）。
     ///
     /// 审计强制修正 3：D-Vis-12 补 PlayerClothing.cs:1375 清理点 patch，共 3 patch 点。
     ///

@@ -9,9 +9,7 @@ using UnityEngine;
 namespace SteamP2PFriends.Client
 {
     /// <summary>
-    /// v0.2.3.3 客机连接器（4.1 诊断补测版本）。
     ///
-    /// v0.2.3.3 P0-A 修复（Codex 第四次审计外部审计报告）：
     ///   - 删除 PlayerInput.serverBoundsHistory 反射、判断、日志和注释。
     ///   - LocalPlayerCreated 后仅记录 AcceptedAndLocalComponentsInitialized 阶段（不命名真实 GameplayReady）。
     ///   - 30s watchdog 仅报警，不调用 Provider.disconnect / RequestDisconnect。
@@ -26,11 +24,9 @@ namespace SteamP2PFriends.Client
         private static bool _subscribed;
         private static ESteamConnectionFailureInfo _lastFailureInfo;
 
-        // v0.2.3.3 P0-A：删除 serverBoundsHistory 反射缓存字段
         // 信号：LocalComponentsInitialized 是否已触发（由 GameplayReadyTracker 回调）
         private static bool _localComponentsInitializedSignaled;
 
-        /// <summary>v0.2.3.3 P0-A：watchdog 已报警标志（避免重复报警）</summary>
         private static bool _postAcceptedWatchdogFired;
 
         /// <summary>ServerAccepted 后 watchdog 超时（30s）</summary>
@@ -40,10 +36,8 @@ namespace SteamP2PFriends.Client
         /// <summary>最后记录的阶段（用于 watchdog 落盘）</summary>
         private static string _lastStage;
 
-        /// <summary>v0.2.3.3 P0-A：AcceptedAndLocalComponentsInitialized 进入时间（用于诊断日志）</summary>
         private static float _acceptedAndLocalComponentsTime;
 
-        /// <summary>P0-3：Disconnecting 阶段进入时间，用于超时保护</summary>
         private static float _disconnectStartTime;
         private const float DisconnectTimeoutSeconds = 10f;
 
@@ -53,7 +47,6 @@ namespace SteamP2PFriends.Client
         public static EJoinState State => _state;
         public static ESteamConnectionFailureInfo LastFailureInfo => _lastFailureInfo;
 
-        /// <summary>Stage 7-5 [指令 E]：仅 Idle/TeardownComplete/Failed 可开始新连接（Failed = WHITELISTED 拒绝后连接已关闭）。</summary>
         public static bool IsSafeToRetry
         {
             get
@@ -98,8 +91,6 @@ namespace SteamP2PFriends.Client
         }
 
         /// <summary>
-        /// v0.2.3.3 P0-A：尝试连接到房主（显式用户操作）。
-        /// Stage 7-5 v2 [P1-EXPLICIT-JOIN-OWNERSHIP-04]：显式加入取消旧等待会话。
         /// </summary>
         public static bool TryConnectToHost(ulong steamIdRaw)
         {
@@ -108,7 +99,6 @@ namespace SteamP2PFriends.Client
             return TryConnectToHostCore(steamIdRaw, P2PConnectOrigin.ExplicitUserAction);
         }
 
-        /// <summary>Stage 7-5 v2 [指令 E]：等待控制器自动重试入口（不取消自身会话）。</summary>
         internal static bool TryConnectToHostFromApprovalWait(ulong steamIdRaw)
         {
             ThreadUtil.assertIsGameThread();
@@ -117,7 +107,6 @@ namespace SteamP2PFriends.Client
 
         private static bool TryConnectToHostCore(ulong steamIdRaw, P2PConnectOrigin origin)
         {
-            // v0.2.3.23 P0-C4：INVALID 硬门控
             if (!SteamP2PFriendsPlugin.DiagnosticBuildValid)
             {
                 RoleLogger.Error(DynamicRole(),
@@ -256,7 +245,6 @@ namespace SteamP2PFriends.Client
 
         /// <summary>
         /// ServerAccepted 阶段 Tick。
-        /// 推进到 LocalPlayerCreated；watchdog 超时仅报警（P0-A：不调 disconnect）。
         /// </summary>
         private static void HandleServerAcceptedTick(float now)
         {
@@ -271,7 +259,6 @@ namespace SteamP2PFriends.Client
                 NativeLoadingGateDumper.Dump("HandleServerAcceptedTick(LocalPlayerCreated)");
             }
 
-            // v0.2.3.3 P0-A：watchdog 超时仅报警，不断线
             if (!_postAcceptedWatchdogFired &&
                 now - _serverAcceptedTime > PostAcceptedWatchdogSeconds)
             {
@@ -285,8 +272,6 @@ namespace SteamP2PFriends.Client
                     $"isConnected={Provider.isConnected} isServer={Provider.isServer} " +
                     $"connectionFailureInfo={Provider.connectionFailureInfo}");
                 NativeLoadingGateDumper.Dump("HandleServerAcceptedTick(watchdog-fired)");
-                // P0-A：不调用 SafeAlert 弹窗，避免 MenuUI.alert 在 LoadingUI 阶段抛 NRE
-                // P0-A：不调用 Provider.disconnect，保持连接存活，等待人工取消
                 _state = EJoinState.Timeout;
                 return;
             }
@@ -305,7 +290,6 @@ namespace SteamP2PFriends.Client
         }
 
         /// <summary>
-        /// v0.2.3.21 P1-S4 修复（外部审计报告-Codex §5）。
         ///
         /// Accepted + LocalPlayer + mask=0xFF + 原生 LoadingUI/五类 loading flags 全部解除后，
         /// 进入 Connected/Operational 终态，停止 watchdog。
@@ -320,7 +304,6 @@ namespace SteamP2PFriends.Client
             bool componentsReady = localPlayerExists && GameplayReadyTracker.IsLocalComponentsInitialized(localPlayer);
             bool loadingFlagsCleared = CheckAllLoadingFlagsCleared();
 
-            // P1-S4：Accepted + LocalPlayer + mask=0xFF + loading flags 全部解除 -> Connected 终态
             if (componentsReady && loadingFlagsCleared)
             {
                 _state = EJoinState.Connected;
@@ -347,7 +330,6 @@ namespace SteamP2PFriends.Client
                 NativeLoadingGateDumper.Dump("HandleLocalPlayerCreatedTick(AcceptedAndLocalComponentsInitialized)");
             }
 
-            // P1-S4：watchdog 超时检查（30s 内条件未满足才输出超时）
             if (!_postAcceptedWatchdogFired &&
                 now - _serverAcceptedTime > PostAcceptedWatchdogSeconds)
             {
@@ -382,7 +364,6 @@ namespace SteamP2PFriends.Client
         }
 
         /// <summary>
-        /// v0.2.3.21 P1-S4：检查原生 LoadingUI/五类 loading flags 是否全部解除。
         /// 用于 Connected/Operational 终态判定。
         /// </summary>
         private static bool CheckAllLoadingFlagsCleared()
@@ -406,13 +387,10 @@ namespace SteamP2PFriends.Client
         }
 
         /// <summary>
-        /// v0.2.3.3 P0-A：由 GameplayReadyTracker 在 LocalComponentsInitialized bitmask 完成时回调。
-        /// 仅记录信号，不推进 GameplayReady 状态（P0-A：禁止以 bitmask 宣告真实 GameplayReady）。
         /// </summary>
         internal static void NotifyLocalComponentsInitialized()
         {
             _localComponentsInitializedSignaled = true;
-            // v0.2.3.4 Medium-2：Accepted 到达前不宣告 AcceptedAndLocalComponentsInitialized 已达成
             // 仅记录信号本身，待 Accepted Postfix 与本信号均已满足后才记录组合阶段
             bool acceptedSeen = _state == EJoinState.Connected || _serverAcceptedTime > 0f;
             string phase = acceptedSeen
@@ -424,7 +402,6 @@ namespace SteamP2PFriends.Client
         }
 
         /// <summary>
-        /// v0.2.3.3 P0-B：外部触发加载门快照（用于 QueuePositionChanged/Accepted/InitializePlayer Postfix）。
         /// </summary>
         internal static void DumpLoadingGate(string reason)
         {
@@ -432,7 +409,6 @@ namespace SteamP2PFriends.Client
         }
 
         /// <summary>
-        /// v0.2.3.2 P0-9：Disconnecting 阶段 Tick。
         /// </summary>
         private static void HandleDisconnectingTick(float now)
         {
@@ -442,7 +418,6 @@ namespace SteamP2PFriends.Client
                 now - _disconnectStartTime > DisconnectTimeoutSeconds)
             {
                 bool isConnected = Provider.isConnected;
-                // P0-10: 使用 Unity Object == 重载识别已 Destroy 的本地玩家
                 // vanilla Player._localPlayer 在 OnDestroy/disconnect 中均不清空（Player.cs:1725-1793, Provider.cs:2597-2693），
                 // ReferenceEquals 绕过 == 重载，对已 Destroy 的 Unity Object 仍返回非 null，导致 TeardownFailed 误触发。
                 bool hasLocalPlayer = Player.LocalPlayer != null;
@@ -471,7 +446,6 @@ namespace SteamP2PFriends.Client
         {
             if (_state != EJoinState.Disconnecting) return;
 
-            // P0-10: Player.LocalPlayer == null 走 Unity Object == 重载，识别已 Destroy 的本地玩家
             if (!Provider.isConnected && Player.LocalPlayer == null)
             {
                 _state = EJoinState.TeardownComplete;
@@ -484,8 +458,6 @@ namespace SteamP2PFriends.Client
 
         internal static bool TryConnectFromLobby(ulong steamIdRaw)
         {
-            // v0.2.3.23 P0-C4：INVALID 硬门控 - lobby 自动连接入口
-            //   审计报告-Codex §3 P0-Critical-4 要求：客机公开连接入口同样检查
             //   虽然内部会调 TryConnectToHost（已有门控），但 lobby 入口应在调用前就拒绝，
             //   避免在 DiagnosticBuildValid=false 时仍记录 "LobbyGameCreated 自动连接" 误导日志
             if (!SteamP2PFriendsPlugin.DiagnosticBuildValid)
@@ -503,7 +475,6 @@ namespace SteamP2PFriends.Client
         }
 
         /// <summary>
-        /// P1-2：以 onClientConnected 为 ServerAccepted 权威信号。
         /// D-7 Accepted.ReadMessage Postfix 仅诊断，不推进状态。
         /// </summary>
         internal static void NotifyServerAccepted()
@@ -515,7 +486,6 @@ namespace SteamP2PFriends.Client
         }
 
         /// <summary>
-        /// v0.2.3.3 P0-B：QueuePositionChanged Postfix 回调。
         /// </summary>
         internal static void NotifyQueuePositionChanged(byte newPosition)
         {
@@ -535,7 +505,6 @@ namespace SteamP2PFriends.Client
                     $"[Diag] 本地 SteamUser ID={SteamUser.GetSteamID().m_SteamID} " +
                     $"targetSteamId={_targetSteamId} identityCheck={(SteamUser.GetSteamID().m_SteamID == _targetSteamId ? "SAME(self)" : "OK(remote)")}");
 
-                // v0.2.3.5 P1-1：好友/在线状态观察（仅记录，不阻止连接）
                 try
                 {
                     SteamP2PFriends.Client.FriendStatusObserver.RecordBeforeConnect(_targetSteamId);
@@ -545,7 +514,6 @@ namespace SteamP2PFriends.Client
                     RoleLogger.Warn(DynamicRole(), $"[Diag] FriendStatusObserver.RecordBeforeConnect 异常（不阻断）: {ex.Message}");
                 }
 
-                // v0.2.3.5 P0-4：客机 ConnectP2P 前 relay/auth readiness 快照
                 try
                 {
                     SteamP2PFriends.Shared.SnsDiagnosticUtil.SnapshotRelayAuthReadiness(DynamicRole(), "ConnectP2P-pre");
@@ -580,7 +548,6 @@ namespace SteamP2PFriends.Client
         private static void OnClientConnected()
         {
             ThreadUtil.assertIsGameThread();
-            // Stage 7-5 v2 [P0-WAIT-SUCCESS-CLEANUP-02]：批准成功后立即清除等待 UI
             P2PApprovalWaitController.NotifyConnectionAccepted();
 
             RoleLogger.Info(DynamicRole(),
@@ -624,7 +591,6 @@ namespace SteamP2PFriends.Client
             {
                 RoleLogger.Info(DynamicRole(), $"[Client] 断开（NONE，非错误）lastFailure={_lastFailureInfo}");
 
-                // P0-10: Player.LocalPlayer == null 走 Unity Object == 重载，识别已 Destroy 的本地玩家
             if (!Provider.isConnected && Player.LocalPlayer == null)
                 {
                     _state = EJoinState.TeardownComplete;
@@ -645,12 +611,10 @@ namespace SteamP2PFriends.Client
             RoleLogger.Error(DynamicRole(),
                 $"!!! 连接失败 !!! target={_targetSteamId} state={_state} info={_lastFailureInfo}");
 
-            // Stage 7-6 uses one successful connection followed by in-world quarantine.
             // Legacy WHITELISTED auto-retry is intentionally disabled to prevent Steam rate limiting.
             HandleDisconnectFailureRouting(_lastFailureInfo, _targetSteamId);
         }
 
-        /// <summary>Stage 7-5 v3 [P1-WHITELISTED-ALERT-03]：可测试的断开失败路由。</summary>
         internal static void HandleDisconnectFailureRouting(ESteamConnectionFailureInfo failureInfo, ulong targetSteamId)
         {
             SafeAlert($"连接失败：{failureInfo}");
@@ -682,7 +646,6 @@ namespace SteamP2PFriends.Client
             }
         }
 
-        // Stage 7-5 v3 W16 测试钩子：SafeAlert 调用计数
         internal static int _testSafeAlertCount;
         // 仅控制台单元测试使用：隔离 Unity/Steam ECall，不绕过生产失败路由判断。
         internal static bool _testBypassFailurePresentationRuntime;
@@ -699,7 +662,6 @@ namespace SteamP2PFriends.Client
         [MethodImpl(MethodImplOptions.NoInlining)]
         private static void SafeAlertRuntime(string message)
         {
-            // v0.2.3.4 Low-1：null-safe SafeAlert（文案校正版）
             // - 若 MenuUI.window 未就绪，仅记录警告并跳过弹窗（不缓存报警，不阻断）
             // - 不在 alert 失败时触发 disconnect
             // - 附带报警时间，以便区分 30s watchdog 与之后的人工取消
@@ -723,7 +685,6 @@ namespace SteamP2PFriends.Client
         }
 
         /// <summary>
-        /// v0.2.3.3 P1-A：动态角色判定。
         /// 不再使用调用方传入的硬编码前缀，改用 Provider/HostManager 动态事实推断。
         /// </summary>
         private static string DynamicRole()
@@ -745,7 +706,6 @@ namespace SteamP2PFriends.Client
         }
 
         /// <summary>
-        /// v0.2.3.1 P0-3：仅 TeardownComplete 后才允许 Reset。
         /// </summary>
         internal static void Reset()
         {
@@ -766,7 +726,6 @@ namespace SteamP2PFriends.Client
             _localComponentsInitializedSignaled = false;
             _postAcceptedWatchdogFired = false;
             _acceptedAndLocalComponentsTime = 0f;
-            // v0.2.3.4 Medium-1：Reset 时停止 Accepted 后周期追踪，避免污染下一次连接日志
             NativeLoadingGateDumper.StopPostAcceptedTracking();
         }
     }

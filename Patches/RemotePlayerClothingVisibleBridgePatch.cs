@@ -9,7 +9,6 @@ using UnityEngine;
 namespace SteamP2PFriends.Patches
 {
     /// <summary>
-    /// v0.2.3.22 P0-S3 修复（外部审计报告-Codex §5 + v0.2.3.21 单机冒烟前静态外部审计返修 High-1）。
     ///
     /// 补齐房主本地视图的远程玩家初始可见信号。
     ///
@@ -23,7 +22,6 @@ namespace SteamP2PFriends.Patches
     /// 修复：在远程 Player.InitializePlayer() 成功返回后登记重试任务，由 Plugin.Update 驱动
     ///       在严格门控下调用 player.animator.NotifyClothingIsVisible()
     ///
-    /// v0.2.3.22 High-1 强化门控（审计返修）：
     ///   - player.clothing != null
     ///   - 第三人称 SMR thirdRenderer_0/1 反射非空（精确验证两个目标 renderer）
     ///   - 两个目标 SMR sharedMaterial != null
@@ -31,17 +29,13 @@ namespace SteamP2PFriends.Patches
     ///   - 失败超重试上限只报警，不直接写字段
     ///   - 成功日志记录 hidden 前后、SMR enabled/total、material-null、shirt/pants/hat
     ///
-    /// 严格门控（审计 §5 P0-S3 + v0.2.3.22 High-1）：
     ///   - HostManager.IsP2PHostMode
     ///   - Provider.isServer && !Dedicator.IsDedicatedServer
     ///   - !player.channel.IsLocalPlayer
     ///   - owner transport 为真正远端连接（!IsLocalServerHost）
     ///   - animator 已存在
     ///   - 玩家存活（player.life.IsAlive）
-    ///   - clothing != null（v0.2.3.22 新增）
-    ///   - thirdRenderer_0/1 非空 + sharedMaterial 非空（v0.2.3.22 新增）
     ///
-    /// 严格禁止（审计 §8 + v0.2.3.22 返修）：
     ///   - 直接反射写 isHiddenWaitingForClothing
     ///   - 每帧强开 SMR
     ///   - 在前置状态不完整时强行显示
@@ -56,17 +50,14 @@ namespace SteamP2PFriends.Patches
 
         public static bool P0S3_Registered { get; private set; }
 
-        // v0.2.3.22 自检：owner 精确元数据（允许其他 Postfix 共存，只检查自家 owner 精确 1）
         public static bool P0S3_PostfixOwnerVerified { get; private set; }
         public static string P0S3_PostfixOwnerSummary { get; private set; } = "<unverified>";
 
-        // v0.2.3.22 自检：反射字段完整性
         public static bool P0S3_ReflectionComplete { get; private set; }
 
         public static bool AllRegistrationsSucceeded =>
             P0S3_Registered && P0S3_PostfixOwnerVerified && P0S3_ReflectionComplete;
 
-        // v0.2.3.38 4B 编码（Codex 第三十四次审计 E-4/E-5）：暴露 RetryStates 计数为只读出口，
         // 供 Plugin.OnEnemyDisconnectedHandler 入口观察与 WorldSyncDiagnosticCore.ResetAll 会话重置观察使用。
         // 不暴露字典本身，不提供写入接口。
         public static int RetryStatesCount
@@ -79,7 +70,6 @@ namespace SteamP2PFriends.Patches
         }
 
         /// <summary>
-        /// v0.2.3.38 4B 编码 R2：只读查询指定 SteamID 是否仍存在 RetryState。
         /// 用于 E-4 OnEnemyDisconnectedHandler 入口观察，证明断开的 SteamID 是否仍在字典中。
         /// 不暴露字典，不提供写入接口。
         /// </summary>
@@ -94,7 +84,6 @@ namespace SteamP2PFriends.Patches
 
         static RemotePlayerClothingVisibleBridgePatch()
         {
-            // v0.2.3.38 4B 编码 E-5：注册 WorldSyncDiagnosticCore.ResetAll 会话重置回调。
             // 仅观察会话重置事件，不清空 _retryStates（审计明确禁止修改 _retryStates 与 Tick 逻辑）。
             try
             {
@@ -107,9 +96,7 @@ namespace SteamP2PFriends.Patches
         }
 
         /// <summary>
-        /// v0.2.3.39 5B-P0-S3（Codex 第四十二次审计 §4.1 授权）：
         ///   WorldSyncDiagnosticCore.ResetAll 会话重置回调。
-        ///   修复双重生命周期缺陷之 1 -- Plugin 转发处理器遗漏调用 P0-S3 清理。
         ///   现在由 OnSessionReset 全量清空 _retryStates + _completedToRemove，
         ///   防止跨会话 Completed=true 项残留导致第二会话同 SteamID 命中旧项。
         ///   线程边界：与 Tick 同主线程访问，无需锁。
@@ -137,7 +124,6 @@ namespace SteamP2PFriends.Patches
         private static FieldInfo _thirdRenderer1Field;
         private static bool _reflectionCached;
 
-        // v0.2.3.22 High-1: 每玩家重试状态
         private class RetryState
         {
             public ulong SteamId;
@@ -172,7 +158,6 @@ namespace SteamP2PFriends.Patches
         }
 
         /// <summary>
-        /// v0.2.3.23 P0-C1：在所有手工 patch 登记完成后由 Plugin.VerifyCriticalPatches 调用，
         /// 重新实时读取 Harmony 元数据进行精确 MethodInfo 自检。
         /// </summary>
         public static void ReverifyOwnersAfterAllRegistrations(Harmony harmony)
@@ -195,7 +180,6 @@ namespace SteamP2PFriends.Patches
                 _thirdRenderer0Field = AccessTools.Field(typeof(PlayerAnimator), "thirdRenderer_0");
                 _thirdRenderer1Field = AccessTools.Field(typeof(PlayerAnimator), "thirdRenderer_1");
 
-                // v0.2.3.22 High-1: thirdRenderer_0/1 反射必须成功（isHiddenWaitingForClothing 仅诊断用可降级）
                 P0S3_ReflectionComplete = (_thirdRenderer0Field != null) && (_thirdRenderer1Field != null);
 
                 if (_isHiddenWaitingForClothingField == null)
@@ -250,7 +234,6 @@ namespace SteamP2PFriends.Patches
         }
 
         /// <summary>
-        /// v0.2.3.23 P0-C1：精确 MethodInfo owner 自检（审计报告-Codex §3 P0-C1 修订）。
         /// 使用精确 MethodInfo 比较，允许同一 owner 的其他合法 Postfix 共存。
         /// 日志输出 exact/same-owner-other/foreign/total 四项元数据。
         /// </summary>
@@ -353,9 +336,7 @@ namespace SteamP2PFriends.Patches
         }
 
         /// <summary>
-        /// v0.2.3.22 High-1: 每帧驱动重试。由 Plugin.Update 调用。
         ///
-        /// v0.2.3.39 5B-P0-S3（Codex 第四十二次审计 §4 授权）：
         ///   修复双重生命周期缺陷之 2 —— Tick 中 `if (rs.Completed) continue;` 使成功项
         ///   永久跳过 `_completedToRemove` 加入，导致字典中成功项从不删除。
         ///   修复：成功项立即加入 `_completedToRemove`，下一帧循环结束统一 Remove。
@@ -373,7 +354,6 @@ namespace SteamP2PFriends.Patches
             foreach (var kv in _retryStates)
             {
                 RetryState rs = kv.Value;
-                // v0.2.3.39 5B-P0-S3 修复：成功项立即加入移除列表，避免永久 continue 导致字典膨胀
                 if (rs.Completed)
                 {
                     _completedToRemove.Add(kv.Key);
@@ -399,7 +379,6 @@ namespace SteamP2PFriends.Patches
         }
 
         /// <summary>
-        /// v0.2.3.39 5B-P0-S3（Codex 第四十二次审计 §4.1 授权）：
         ///   单 SteamID 事件驱动清理入口。由 Plugin.OnEnemyDisconnectedHandler 调用。
         ///   仅删除指定 SteamID 的 RetryState，不影响其他在线玩家。
         ///   线程边界：与 Tick 同主线程访问，无需锁。
@@ -428,7 +407,6 @@ namespace SteamP2PFriends.Patches
 
         /// <summary>
         /// 客机断开时清理重试状态。
-        /// v0.2.3.39 5B-P0-S3：保留向后兼容入口，但 Plugin.OnEnemyDisconnectedHandler
         ///   现在直接调用 RemoveRetryState(steamId) 做单 ID 清理。
         /// </summary>
         public static void OnClientDisconnected()
@@ -474,7 +452,6 @@ namespace SteamP2PFriends.Patches
                     return;
                 }
 
-                // v0.2.3.22 High-1 新增门控：clothing != null
                 PlayerClothing clothing = player.clothing;
                 if (clothing == null)
                 {
@@ -482,7 +459,6 @@ namespace SteamP2PFriends.Patches
                     return;
                 }
 
-                // v0.2.3.22 High-1 新增门控：thirdRenderer_0/1 非空 + sharedMaterial 非空
                 SkinnedMeshRenderer smr0 = _thirdRenderer0Field?.GetValue(animator) as SkinnedMeshRenderer;
                 SkinnedMeshRenderer smr1 = _thirdRenderer1Field?.GetValue(animator) as SkinnedMeshRenderer;
                 if (smr0 == null || smr1 == null)
@@ -626,10 +602,7 @@ namespace SteamP2PFriends.Patches
         private static class Hooks
         {
             /// <summary>
-            /// P0-S3: Player.InitializePlayer Postfix。
             /// 在远程玩家 InitializePlayer 成功返回后，登记重试任务。
-            /// v0.2.3.22 High-1: 前置不全时有界延迟重试（0/1/3 秒），成功后停止；不得每帧强开。
-            /// v0.2.3.38 4B 编码 E-1/E-2：内嵌诊断日志，不修改 _retryStates 逻辑。
             /// </summary>
             internal static void InitializePlayerPostfix(Player __instance)
             {
@@ -655,7 +628,6 @@ namespace SteamP2PFriends.Patches
                     catch { }
                     if (steamId == 0UL) return;
 
-                    // v0.2.3.38 4B 编码 E-1：有效门控全部通过，即将进入 ContainsKey 检查。
                     // 此日志证明 Postfix 已通过所有 fail-safe 门控，到达"登记重试任务"分支入口。
                     RoleLogger.Info("[Host]",
                         $"[P0-S3] E-1 InitializePlayerPostfix 通过全部门控，即将检查 ContainsKey " +
@@ -664,7 +636,6 @@ namespace SteamP2PFriends.Patches
                     // 登记重试任务（首次尝试在下一帧 Tick 时执行，等价 0s 延迟）
                     if (_retryStates.TryGetValue(steamId, out RetryState existing))
                     {
-                        // v0.2.3.38 4B 编码 R1：旧 RetryState 提前返回记录关键字段。
                         // 仅观察，不修改旧项，不覆盖字典。记录 attempt/completed/playerIsNull/lastFailReason，
                         // 4C 可证明命中项是第一会话遗留的 Completed=true 项或验证 Player 引用状态。
                         RoleLogger.Info("[Host]",

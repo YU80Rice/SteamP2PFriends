@@ -8,20 +8,15 @@ using System.Reflection.Emit;
 namespace SteamP2PFriends.Patches.P0EBarricadeLifecycle
 {
     /// <summary>
-    /// v0.2.3.39 5B-1B v2.5.1（Codex 第六十二次审计返修）：
     /// Barricade equip/checkClaims Transpiler 的 IL 匹配器。
     ///
     /// 设计依据：
-    ///   .audit/v0.2.3.39-stage5B-1B-v2.5-smoke-20260728/Codex第六十二次Barricade-v2.5冒烟失败审计与指导报告-20260728.md §4
-    ///   .audit/v0.2.3.39-stage5B-1B-v2.5-design-20260727/barricade-fix-design-v2.5-20260727.md §2-§3
     ///
-    /// Codex 62nd §2 真实根因纠正：
     ///   - 原始 Assembly-CSharp IL 编码：checkClaims 使用 brfalse.s，equip 使用 brfalse
     ///   - Harmony ILManipulator.NormalizeInstructions 通过 ShortToLongMap 将 Brfalse_S 规范化为 Brfalse
     ///   - PatchProcessor.GetCurrentInstructions 与 Transpiler 收到的 CodeInstruction 均为规范化后的形式（未应用 Transpiler 的快照仍是规范化后表示）
     ///   - 因此验证不得按方法名强制 Brfalse 或 Brfalse_S，应按语义验证 false-branch
     ///
-    /// Codex 62nd §4.1 v2.5.1 修复：
     ///   - MatchDedicatorBranch 保留：getter 后紧邻 Brfalse 或 Brfalse_S
     ///   - ValidateFalseBranchOpcode：仅当 actual 既不是 Brfalse 也不是 Brfalse_S 时失败
     ///   - 不再按方法名区分 equip/checkClaims 的分支编码
@@ -37,7 +32,6 @@ namespace SteamP2PFriends.Patches.P0EBarricadeLifecycle
         /// <summary>
         /// 在 IL 中匹配 call get_IsDedicatedServer() 后紧邻 Brfalse 或 Brfalse_S 的位置。
         /// 返回所有匹配位置的索引列表（不修改 IL）。
-        /// Codex 60th P0-4：必须验证紧邻分支指令，不再匹配孤立 getter 调用。
         /// </summary>
         public static List<int> MatchDedicatorBranch(IList<CodeInstruction> codes)
         {
@@ -55,7 +49,6 @@ namespace SteamP2PFriends.Patches.P0EBarricadeLifecycle
                 // 使用 CodeInstruction.Calls 扩展方法
                 if (!instr.Calls(getter)) continue;
 
-                // Codex 60th P0-4：必须验证下一条指令是 Brfalse 或 Brfalse_S
                 int nextIdx = i + 1;
                 if (nextIdx >= codes.Count) continue;
 
@@ -100,7 +93,6 @@ namespace SteamP2PFriends.Patches.P0EBarricadeLifecycle
 
         /// <summary>
         /// 验证指定 callIdx 后紧邻的分支指令是否为 false-branch 语义（Brfalse 或 Brfalse_S 任一）。
-        /// Codex 62nd §4.1 v2.5.1：不再按方法名强制 Brfalse 或 Brfalse_S，按语义验证。
         /// Harmony NormalizeInstructions 会把 Brfalse_S 规范化为 Brfalse，因此 CodeInstruction 层
         /// 看到的可能是任一形式（取决于 Harmony 版本与规范化时机）。
         /// 输出 actual 供调用方记录日志，不参与通过/失败判定（除非 actual 既非 Brfalse 也非 Brfalse_S）。

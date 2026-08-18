@@ -6,9 +6,7 @@ using UnityEngine;
 namespace SteamP2PFriends.Shared
 {
     /// <summary>
-    /// v0.2.3.1 P0-D 诊断上下文（v0.2.3.1 修复 P0-7 session 串线）。
     ///
-    /// v0.2.3.1 P0-7 修复（审计要求）：
     ///   - 原 RemoteSteamId/LocalJoinSessionId 为全局单值，多客机交错时互相覆盖。
     ///   - 改为按 remoteSteamId 建立 session 字典，每个 session 独立 sid + 首次见时间。
     ///   - 客机端：BeginClientJoin 仍写本地 session（客机只跟一个远端通信）。
@@ -92,11 +90,9 @@ namespace SteamP2PFriends.Shared
 
         /// <summary>
         /// 主机首次 addPlayer 时按 remoteSteamId 查/建 session。
-        /// 仅在 Provider.isServer=true 时调用（P0-7 修复：客机 addPlayer 不进入 host session 初始化）。
         /// </summary>
         public static void EnsureHostJoinSession(ulong remoteSteamId)
         {
-            // P0-7 修复：客机端不进入 host session 初始化
             if (!Provider.isServer) return;
 
             lock (_idLock)
@@ -183,7 +179,6 @@ namespace SteamP2PFriends.Shared
 
         /// <summary>
         /// D-11 限流器：按 异常类型+首栈帧 聚合，首条完整输出，重复项每 5 秒输出累计次数。
-        /// v0.2.3.1 P0-6 修复：
         ///   - 重复分支也调用 TryFlush（时间驱动 flush，不再因 return 跳过）。
         ///   - 保留首样本 entry（count=1 也保留），仅 count>1 的 entry 在 flush 时输出 AGGREGATE。
         ///   - flush 后清空 count>1 的 entry，count=1 的保留（避免重复 FIRST）。
@@ -204,7 +199,6 @@ namespace SteamP2PFriends.Shared
 
             public static void HandleLog(string logString, string stackTrace, LogType type)
             {
-                // P0-6 修复：ThreadStatic 重入保护（线程安全）
                 if (_reentryGuard != 0) return;
                 _reentryGuard = 1;
                 try
@@ -237,7 +231,6 @@ namespace SteamP2PFriends.Shared
                         }
                     }
 
-                    // P0-6 修复：首条完整输出（在 lock 外，避免日志触发递归时死锁）
                     if (isFirst)
                     {
                         RoleLogger.Error("[Diag]",
@@ -249,7 +242,6 @@ namespace SteamP2PFriends.Shared
                         }
                     }
 
-                    // P0-6 修复：每次都尝试 flush（时间驱动），不再因 return 跳过
                     TryFlush();
                 }
                 finally
@@ -270,7 +262,6 @@ namespace SteamP2PFriends.Shared
 
                 if (!shouldFlush) return;
 
-                // P0-6 修复：创建不可变快照（原实现把 entry 引用放入 snapshot，
                 // 然后立即修改同一 entry 的 Count/FirstSeen，导致输出阶段看到的也是被改写后的值）
                 List<FlushSnapshot> snapshot;
                 lock (_bridgeLock)
@@ -334,7 +325,6 @@ namespace SteamP2PFriends.Shared
             }
 
             /// <summary>
-            /// v0.2.3.2 P0-6 修复：不可变快照，与原 entry 引用解耦。
             /// 在重置原 entry 前创建新对象，输出阶段看到的是原始 Count/FirstSeen/LastSeen。
             /// </summary>
             private class FlushSnapshot

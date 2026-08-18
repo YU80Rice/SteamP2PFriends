@@ -7,7 +7,6 @@ using UnityEngine;
 namespace SteamP2PFriends.Patches
 {
     /// <summary>
-    /// v0.2.3.27 P0-A 决定性诊断（Codex 第 7 节 P0-A + 静态审计返修）：
     /// AnimalManager 世界同步链路五段证据诊断。
     ///
     /// 五段证据闭环：
@@ -17,19 +16,10 @@ namespace SteamP2PFriends.Patches
     ///   4. 客机 Receive 入口：ReceiveMultipleAnimals（初始全量）+ ReceiveAnimalStates（周期状态）
     ///   5. Receive 后状态：客机 animals.Count
     ///
-    /// v0.2.3.27-P0-A 返修：
-    ///   - P0-2：新增 VerifyRegistration（identity-based，owner + MethodInfo 双重验证）
-    ///   - P0-3：补齐 sendAnimalStates Prefix + ReceiveAnimalStates Prefix
-    ///   - P1-2：ReceiveAnimalStates 与 ReceiveMultipleAnimals 分开记录
-    ///   - P1-5：_lastUpdateLogTime 通过 RegisterSessionResetCallback 纳入 ResetAll
     ///
-    /// v0.2.3.27-P0-A 第二轮返修（Codex 第三轮 GO 复审 TC-S2 阻断修正）：
     ///   - SpawnAnimal_Prefix 签名修正：vanilla `spawnAnimal(ushort id, Vector3, Quaternion)`，
     ///     首参是 ushort id 而非 AnimalAsset asset。删除 asset.GUID/FriendlyName 读取，改为只记录 id。
     ///
-    /// v0.2.3.27-P0-A 冒烟中止返修（Codex P0-R7/P0-R8）：
-    ///   - P0-R7：IsPatchRegistered 新增 logWhenMissing，登记前预检查静默
-    ///   - P0-R8：5 个 vanilla 目标完整参数表移到类级别 VanillaXxxParamTypes，
     ///     RegisterManual 与 VerifyRegistration 共用
     ///
     /// vanilla 源码（U3-SDK AnimalManager.cs）：
@@ -46,7 +36,6 @@ namespace SteamP2PFriends.Patches
         private const float UpdateLogInterval = 5.0f;
         private static float _lastUpdateLogTime = -100f;
 
-        // v0.2.3.27-P0-A 冒烟中止返修（Codex P0-R8）：vanilla 目标完整参数类型表，
         // 由 RegisterManual 与 VerifyRegistration 共用。
         //   - Update() 无参数
         //   - sendAnimalStates() 无参数（private instance）
@@ -86,14 +75,8 @@ namespace SteamP2PFriends.Patches
             && ReceiveAnimalStatesPrefixRegistered;
 
         /// <summary>
-        /// v0.2.3.27-P0-A 手动登记（Codex 外部审计裁决 P0-R1～R8）：
         /// 5 个 hook 精确、幂等的 identity-based 手动登记。
         ///
-        /// P0-R1：所有 vanilla 目标使用完整参数类型解析（类级别 VanillaXxxParamTypes）。
-        /// P0-R2：identity-based 幂等。
-        /// P0-R3：每个 hook 独立 try/catch。
-        /// P0-R7：登记前预检查静默（logWhenMissing=false）。
-        /// P0-R8：RegisterManual 与 VerifyRegistration 共用类级别 VanillaXxxParamTypes。
         /// </summary>
         public static bool RegisterManual(Harmony harmony)
         {
@@ -155,7 +138,6 @@ namespace SteamP2PFriends.Patches
         }
 
         /// <summary>
-        /// v0.2.3.27-P0-A 冒烟中止返修（Codex P0-R8）：复用类级别 VanillaXxxParamTypes 完整参数表，
         /// 与 RegisterManual 使用同一套 Type[]。
         /// </summary>
         public static bool VerifyRegistration()
@@ -269,7 +251,6 @@ namespace SteamP2PFriends.Patches
         }
 
         // ============= 3. 源事件：spawnAnimal =============
-        // v0.2.3.27-P0-A 返修（Codex TC-S2）：vanilla 真实签名为
         //   public static void spawnAnimal(ushort id, Vector3 point, Quaternion angle)
         // 首参是 ushort id（动物 asset ID），不是 AnimalAsset。
         [HarmonyPrefix]

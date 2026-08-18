@@ -7,21 +7,13 @@ using System.Text.RegularExpressions;
 namespace SteamP2PFriends.Shared
 {
     /// <summary>
-    /// v0.2.3.7 P0-A/P0-B/P0-E/P0-2/P0-3/P0-5 共享 SNS 诊断工具（Codex 第七次审计返修）。
     ///
-    /// v0.2.3.7 修订（审计 v0.2.3.6 报告 Critical-2/High-2/High-3）：
-    ///   - P0-2：脱敏方法扩展覆盖范围到 11+5 类（新增 JSON secret key:value / HTTP(S) URL / 裸 FQDN）。
     ///     secret payload 字符集扩展到 base64url（- 和 _）+ 任意非空白非引号非括号字符。
     ///     fail-closed residual scan 扩展到 hostname/URI/secret-key/长 base64url，不只 IP。
     ///     endDebug 强制走统一脱敏入口，不再绕过。
     ///     新增 6 项审计 Critical-2 合成输入为回归测试用例。
     ///     失败日志只记 case 名，不打印 needle/redacted output（避免泄漏）。
-    ///   - P0-3：RunRedactionSelfTest 返回 bool，异常视为失败，调用方聚合到 DiagnosticBuildValid 阻断门。
-    ///   - P0-5：SnapshotRelayAuthReadiness 同时记录 API 返回值（relayAvail/authAvail）与 struct m_eAvail。
-    ///   - P0-B（保留）：GetAuthenticationStatus 调用 + m_debugMsg 脱敏输出 + 终态 Prefix 触发 readiness。
-    ///   - P0-E（保留）：GetDetailedConnectionStatus 正数返回时按所需长度重试一次（上限 256 KiB）。
     ///
-    /// v0.2.3.6 保留修订（审计 v0.2.3.5 验收报告 P0-A/P0-B/P0-E）：
     ///   - 脱敏方法改名 RedactSensitiveNetworkData。
     ///   - 终态 Prefix 同步触发 relay/auth readiness snapshot。
     ///
@@ -35,11 +27,9 @@ namespace SteamP2PFriends.Shared
     /// </summary>
     public static class SnsDiagnosticUtil
     {
-        // P0-E：Detailed status 重试上限（256 KiB）
         private const int DetailedStatusMaxRetryBytes = 256 * 1024;
         private const int DetailedStatusInitialBufferBytes = 32768;
 
-        // P0-A：脱敏正则（顺序敏感：先处理多行块，再处理 candidate 行，最后处理单点地址）
         private static readonly Regex _pemCertBlock = new Regex(
             @"-----BEGIN CERTIFICATE-----.*?-----END CERTIFICATE-----",
             RegexOptions.Singleline | RegexOptions.Compiled);
@@ -91,35 +81,27 @@ namespace SteamP2PFriends.Shared
             RegexOptions.Compiled);
 
         // ticket/cert/signature/auth token 关键字 + 后续非空 payload（>=8 字符）
-        // v0.2.3.7 P0-2 修复（审计 Critical-2）：扩展 payload 字符集到 base64url（- 和 _）+ 任意非空白非引号非括号字符
         //   旧正则 [A-Za-z0-9+/=]{8,} 不接受 - 和 _，导致 ticket=abc_def-12345 / cert: abc-def_123456 泄漏
         //   新正则 [^\s"'<>\[\]{}]{8,} 接受 base64url 字符及任意非空白 token，避免误匹配引号/括号
         private static readonly Regex _secretKeywordPayload = new Regex(
             @"(?i)\b(ticket|cert|certificate|signature|auth_token|authToken|authTicket|sessionTicket|cauth|privkey|private_key)\b\s*[:=]\s*[^\s""'<>\[\]{}]{8,}",
             RegexOptions.Compiled);
 
-        // v0.2.3.7 P0-2 新增（审计 Critical-2），v0.2.3.8 P0-A 修订（审计 v0.2.3.7 Critical-1）：
         //   JSON 引号包围的 secret key:value
         //   覆盖 {"ticket":"abc_def-12345"} / {"cert":"abc-def_123456"} / {"ticket":"short"} 等格式
-        //   v0.2.3.7 旧正则 [^"]{8,} 要求 value >= 8 字符，导致 {"ticket":"short"} 等短 value 泄漏
-        //   v0.2.3.8 修改：移除 {8,} 长度限制；检测到高风险 key 就整段脱敏（审计明确要求）
         //   empty value 也允许匹配（避免 {"ticket":""} 仍能识别 key），但实际脱敏只对非空 value 有意义
         private static readonly Regex _jsonSecretKeyValue = new Regex(
             @"""(?:ticket|cert|certificate|signature|auth_token|authToken|authTicket|sessionTicket|cauth|privkey|private_key)""\s*:\s*""[^""]*""",
             RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
-        // v0.2.3.7 P0-2 新增（审计 Critical-2）：HTTP(S) URL
         //   覆盖 peer=https://hidden.example.org/path 等格式
         private static readonly Regex _httpUrl = new Regex(
             @"\bhttps?://[^\s\r\n""'<>{}\[\]]+",
             RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
-        // v0.2.3.8 P0-A 修订（审计 v0.2.3.7 Critical-1）：裸 FQDN（不带端口）
-        //   v0.2.3.7 限制 TLD 为 2-6 字符纯小写字母，导致以下输入泄漏：
         //     - SERVER.EXAMPLE.COM（大写）
         //     - foo.technology（TLD 10 字符）
         //     - 123node.local（数字开头 label）
-        //   v0.2.3.8 修改：
         //     - 大小写不敏感（IgnoreCase）
         //     - TLD 最长 63 字符（DNS label 上限），要求至少含一个字母（避免匹配版本号 1.2.3）
         //     - 允许数字开头 label（合法 hostname 如 123node.local）
@@ -128,7 +110,6 @@ namespace SteamP2PFriends.Shared
             @"\b[a-zA-Z0-9][a-zA-Z0-9\-]{0,62}(?:\.[a-zA-Z0-9][a-zA-Z0-9\-]{0,62})*\.(?=[a-zA-Z0-9\-]{1,63}\b)[a-zA-Z0-9\-]*[a-zA-Z][a-zA-Z0-9\-]*\b",
             RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
-        // v0.2.3.8 P0-A 新增（审计 v0.2.3.7 Critical-1）：单标签 hostname:port（无点）
         //   覆盖 endpoint=LANHOST:27015 等内网单标签 hostname:port 形式
         //   必须在 _hostnameWithPort 之后运行（多点 hostname:port 已被脱敏）
         //   误脱敏（如代码 Method:80）比泄漏更可接受
@@ -137,46 +118,35 @@ namespace SteamP2PFriends.Shared
             RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
         // base64 长串（>= 32 字符，可能为 cert/ticket 编码内容）
-        // v0.2.3.7 P0-2 修复：扩展字符集到 base64url（- 和 _）
         private static readonly Regex _longBase64 = new Regex(
             @"[A-Za-z0-9+/=_\-]{32,}={0,2}",
             RegexOptions.Compiled);
 
         // fail-closed 检查：脱敏后再扫一次，若仍含疑似敏感内容则只记稳定摘要
-        // v0.2.3.7 P0-2 修复（审计 Critical-2）：residual scan 扩展到 hostname/URI/secret-key/长 base64url，不只 IP
         private static readonly Regex _residualIpv4 = new Regex(
             @"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b",
             RegexOptions.Compiled);
         private static readonly Regex _residualIpv6 = new Regex(
             @"(?<![0-9a-fA-F:])[0-9a-fA-F]{1,4}(?::[0-9a-fA-F]{1,4}){2,7}(?![0-9a-fA-F:])",
             RegexOptions.Compiled);
-        // v0.2.3.7 新增，v0.2.3.8 P0-A 修订（审计 v0.2.3.7 Critical-1）：residual 裸 FQDN
-        //   v0.2.3.7 旧正则限制 TLD 为 2-6 字符纯小写字母，与 _bareFqdn 不一致，导致 SERVER.EXAMPLE.COM 等残留仍能绕过 fail-closed
-        //   v0.2.3.8 修改：与 _bareFqdn 完全一致（IgnoreCase + TLD 最长 63 字符 + 至少含一个字母 + 数字开头 label）
         private static readonly Regex _residualFqdn = new Regex(
             @"\b[a-zA-Z0-9][a-zA-Z0-9\-]{0,62}(?:\.[a-zA-Z0-9][a-zA-Z0-9\-]{0,62})*\.(?=[a-zA-Z0-9\-]{1,63}\b)[a-zA-Z0-9\-]*[a-zA-Z][a-zA-Z0-9\-]*\b",
             RegexOptions.IgnoreCase | RegexOptions.Compiled);
-        // v0.2.3.7 新增：residual HTTP(S) URL 协议头
         private static readonly Regex _residualHttpUrl = new Regex(
             @"\bhttps?://",
             RegexOptions.IgnoreCase | RegexOptions.Compiled);
-        // v0.2.3.7 新增：residual secret keyword + 分隔符（payload 可能已被部分脱敏，但 key 仍残留）
         private static readonly Regex _residualSecretKeyword = new Regex(
             @"(?i)\b(ticket|cert|certificate|signature|auth_token|authToken|authTicket|sessionTicket|cauth|privkey|private_key)\b\s*[:=]");
-        // v0.2.3.7 新增：residual 长 base64url 串（>= 32 字符，含 - 和 _）
         private static readonly Regex _residualLongBase64Url = new Regex(
             @"[A-Za-z0-9+/=_\-]{32,}={0,2}",
             RegexOptions.Compiled);
-        // v0.2.3.8 P0-A 新增（审计 v0.2.3.7 Critical-1）：residual 单标签 hostname:port（与 _singleLabelHostPort 一致）
         //   覆盖 LANHOST:27015 等内网单标签 hostname:port 残留检测
         private static readonly Regex _residualSingleLabelHostPort = new Regex(
             @"\b[a-zA-Z][a-zA-Z0-9\-]{2,}:\d{1,5}\b",
             RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
         /// <summary>
-        /// P0-2：在 handle 关闭前抓取终态。
         /// 在 OnSteamNetConnectionStatusChanged Prefix 中调用，handle 仍有效。
-        /// v0.2.3.6 P0-B：终态 Prefix 同步触发 relay/auth readiness snapshot。
         /// </summary>
         public static void SnapshotTerminalState(string role, string transportLabel, HSteamNetConnection handle,
             SteamNetConnectionStatusChangedCallback_t callback)
@@ -193,7 +163,6 @@ namespace SteamP2PFriends.Shared
                 sb.Append("handle=").Append(handle.m_HSteamNetConnection).Append(' ');
 
                 int endReason = callback.m_info.m_eEndReason;
-                // v0.2.3.7 P0-2 修复（审计 Critical-2）：endDebug 必须走统一脱敏入口
                 //   旧实现直接拼入日志，绕过脱敏，可能泄漏 hostname/ticket/cert 等敏感内容
                 string endDebugRaw = callback.m_info.m_szEndDebug ?? "<empty>";
                 string endDebug = RedactSensitiveNetworkData(endDebugRaw);
@@ -225,7 +194,6 @@ namespace SteamP2PFriends.Shared
 
                 RoleLogger.Info(role, sb.ToString());
 
-                // P0-B：终态 Prefix 同步触发 relay/auth readiness snapshot（审计 v0.2.3.5 验收报告 High-1）
                 try
                 {
                     SnapshotRelayAuthReadiness(role, $"Terminal-Prefix-handle{handle.m_HSteamNetConnection}");
@@ -235,7 +203,6 @@ namespace SteamP2PFriends.Shared
                     RoleLogger.Warn(role, $"[Diag] [D10-Term] Terminal Prefix readiness snapshot 异常（不阻断）: {ex.Message}");
                 }
 
-                // P0-2：GetConnectionRealTimeStatus（handle 仍有效）
                 try
                 {
                     SteamNetConnectionRealTimeStatus_t rt = default(SteamNetConnectionRealTimeStatus_t);
@@ -264,7 +231,6 @@ namespace SteamP2PFriends.Shared
                     RoleLogger.Warn(role, $"[Diag] [D10-Term] RealTimeStatus 异常（不阻断）: {ex.Message}");
                 }
 
-                // P0-2 + P0-E：GetDetailedConnectionStatus（含正数返回重试）
                 SnapshotDetailedConnectionStatus(role, handle);
             }
             catch (Exception ex)
@@ -274,12 +240,10 @@ namespace SteamP2PFriends.Shared
         }
 
         /// <summary>
-        /// P0-2 + P0-E：抓取 GetDetailedConnectionStatus。
         /// 返回值语义（Steamworks.NET 文档）：
         ///   0  = 成功，buffer 已填入 details
         ///   -1 = invalid handle（handle 已关闭）
         ///   正数 = 所需 buffer 大小，当前 buffer 不够，需按返回值重试
-        /// v0.2.3.6 P0-E：正数返回时按所需长度（加上终止符余量）重试一次，上限 256 KiB。
         /// 所有最终正文必须经过 RedactSensitiveNetworkData 脱敏。
         /// </summary>
         public static void SnapshotDetailedConnectionStatus(string role, HSteamNetConnection handle)
@@ -374,7 +338,6 @@ namespace SteamP2PFriends.Shared
         }
 
         /// <summary>
-        /// P0-2/P0-3：在连接尚未终态时读取一次连接快照（用于生命周期 tracker）。
         /// </summary>
         public static void SnapshotLiveState(string role, string transportLabel, HSteamNetConnection handle, string phaseTag)
         {
@@ -427,8 +390,6 @@ namespace SteamP2PFriends.Shared
         }
 
         /// <summary>
-        /// P0-4：双端多时机记录 Steam relay/auth readiness。
-        /// v0.2.3.6 P0-B：增加 GetAuthenticationStatus + m_debugMsg 脱敏输出。
         /// 全部只读，不修改任何 SNS 状态。
         /// </summary>
         public static void SnapshotRelayAuthReadiness(string role, string occasion)
@@ -442,7 +403,6 @@ namespace SteamP2PFriends.Shared
                     ESteamNetworkingAvailability relayAvail = SteamNetworkingUtils.GetRelayNetworkStatus(out relay);
                     string relayDebugRaw = relay.m_debugMsg ?? "";
                     string relayDebugRedacted = RedactSensitiveNetworkData(relayDebugRaw);
-                    // v0.2.3.7 P0-5 修复（审计 High-3）：同时记录 API 返回值与 struct m_eAvail
                     //   旧实现只记录 struct m_eAvail，丢失 API 返回值，无法识别返回值与 details 状态不一致
                     RoleLogger.Info(role,
                         $"[Diag] [D-Relay] {occasion} GetRelayNetworkStatus " +
@@ -458,14 +418,12 @@ namespace SteamP2PFriends.Shared
                     RoleLogger.Warn(role, $"[Diag] [D-Relay] GetRelayNetworkStatus 异常（不阻断）: {ex.Message}");
                 }
 
-                // 2. P0-B 新增：Authentication status
                 try
                 {
                     SteamNetAuthenticationStatus_t auth;
                     ESteamNetworkingAvailability authAvail = SteamNetworkingSockets.GetAuthenticationStatus(out auth);
                     string authDebugRaw = auth.m_debugMsg ?? "";
                     string authDebugRedacted = RedactSensitiveNetworkData(authDebugRaw);
-                    // v0.2.3.7 P0-5 修复（审计 High-3）：同时记录 API 返回值与 struct m_eAvail
                     RoleLogger.Info(role,
                         $"[Diag] [D-Auth] {occasion} GetAuthenticationStatus " +
                         $"apiReturn={authAvail}({(int)authAvail}) " +
@@ -502,7 +460,6 @@ namespace SteamP2PFriends.Shared
         }
 
         /// <summary>
-        /// P0-4：只读读取一个全局 int 配置。失败不抛异常，仅记录。
         /// </summary>
         private static void ReadGlobalConfigInt(string role, string occasion,
             ESteamNetworkingConfigValue value, string label)
@@ -565,7 +522,6 @@ namespace SteamP2PFriends.Shared
         }
 
         /// <summary>
-        /// P0-A：统一脱敏入口（v0.2.3.6 改名 + 扩展）。
         ///
         /// 覆盖范围（按处理顺序，先处理多行/结构化内容，再处理单点地址）：
         ///   1. PEM 证书 / 私钥 / 通用 PEM 块
@@ -599,10 +555,8 @@ namespace SteamP2PFriends.Shared
             // 3. STUN/TURN URL
             redacted = _stunTurnUrl.Replace(redacted, "[TURN-URL-REDACTED]");
 
-            // 4. v0.2.3.7 P0-2 新增：HTTP(S) URL（必须在裸 FQDN 之前，避免 URL 内 hostname 被部分脱敏）
             redacted = _httpUrl.Replace(redacted, m => $"[URL:{m.Length}chars-REDACTED]");
 
-            // 5. v0.2.3.7 P0-2 新增：JSON 引号包围的 secret key:value（必须在 _secretKeywordPayload 之前，
             //    避免 JSON key 被 _secretKeywordPayload 部分匹配导致泄漏 value）
             redacted = _jsonSecretKeyValue.Replace(redacted, m => $"\"[json-secret:{m.Length}chars-REDACTED]\"");
 
@@ -624,16 +578,13 @@ namespace SteamP2PFriends.Shared
             // 11. hostname:port
             redacted = _hostnameWithPort.Replace(redacted, "[HOST:PORT-REDACTED]");
 
-            // 12. v0.2.3.7 P0-2 修改：ticket/cert/signature 关键字 + payload 必须在裸 FQDN 之前
             //   原因：secret payload 可能含点号（如 cert=abc-def.example.com），
             //   若先跑 _bareFqdn 会只匹配 "def.example.com" 部分，留下 "abc_" 残渣。
             //   先跑 _secretKeywordPayload 可整段脱敏 "cert=abc-def.example.com" -> [SECRET:Nchars-REDACTED]。
             redacted = _secretKeywordPayload.Replace(redacted, m => $"[SECRET:{m.Length}chars-REDACTED]");
 
-            // 13. v0.2.3.7 P0-2 新增：裸 FQDN（不带端口，处理无 secret keyword 前缀的 hostname）
             redacted = _bareFqdn.Replace(redacted, "[FQDN-REDACTED]");
 
-            // 14. v0.2.3.8 P0-A 新增（审计 v0.2.3.7 Critical-1）：单标签 hostname:port
             //   必须在 _hostnameWithPort 之后（多点 hostname:port 已被脱敏）和 _bareFqdn 之后（避免与 FQDN 重叠匹配）
             //   覆盖 LANHOST:27015 等内网单标签 hostname:port 形式
             //   误脱敏（如代码 Method:80）比泄漏更可接受（审计明确允许）
@@ -642,7 +593,6 @@ namespace SteamP2PFriends.Shared
             // 15. 残留长 base64 串（>= 32 字符，含 base64url）
             redacted = _longBase64.Replace(redacted, m => $"[BASE64:{m.Length}chars-REDACTED]");
 
-            // v0.2.3.7 P0-2 修复（审计 Critical-2），v0.2.3.8 P0-A 扩展：
             //   fail-closed 检查扩展到 hostname/URI/secret-key/长 base64url/单标签 hostname:port
             //   若脱敏后仍含疑似 IP / hostname / URI / secret-key 残留 / 长 base64url / 单标签 host:port，只记稳定摘要，不保留原文
             if (_residualIpv4.IsMatch(redacted) || _residualIpv6.IsMatch(redacted)
@@ -659,7 +609,6 @@ namespace SteamP2PFriends.Shared
         }
 
         /// <summary>
-        /// 向后兼容别名：v0.2.3.5 旧调用方仍使用 RedactSensitiveAddresses。
         /// 内部转发到 RedactSensitiveNetworkData。
         /// </summary>
         public static string RedactSensitiveAddresses(string raw)
@@ -681,15 +630,12 @@ namespace SteamP2PFriends.Shared
         }
 
         /// <summary>
-        /// v0.2.3.7 P0-A item 5 + P0-2 + P0-3，v0.2.3.8 P0-A 扩展：确定性脱敏自检（审计 v0.2.3.6 报告 Critical-2/High-2 + v0.2.3.7 报告 Critical-1 要求）。
         /// 启动期执行一次，输出 PASS/FAIL。
-        /// v0.2.3.7 修改：
         ///   - 返回 bool（true=全 PASS，false=任一 FAIL 或异常）。
         ///   - 异常也视为失败（返回 false）。
         ///   - 失败日志只记 case 名，不打印 needle/redacted output（避免在失败日志中泄漏敏感内容）。
         ///   - 新增 6 项审计合成输入为回归测试（覆盖 ticket=abc_def-12345 / JSON ticket / 裸 hostname /
         ///     HTTPS hostname / 含 -/_ 的 cert payload / endDebug hostname）。
-        /// v0.2.3.8 修改（审计 v0.2.3.7 Critical-1）：
         ///   - 新增 5 项审计合成输入为回归测试（覆盖大写 FQDN / 长 TLD / 短 JSON ticket /
         ///     单标签 hostname:port / 数字开头 hostname），自检总数从 21 增加到 26。
         /// 调用方（VerifyCriticalPatches）应将返回值聚合到 DiagnosticBuildValid 阻断门。
@@ -748,7 +694,6 @@ namespace SteamP2PFriends.Shared
                     new RedactTestCase("signature-payload",
                         "signature=YXNkZmdoamtsenhjdmJuYW1xcHdlcnR5dWlvcGFzZGZnaGprbHp4Y3ZibmFtcXB3ZXJ0eXVpbw==",
                         new[] { "YXNkZmdoamtsenhjdmJuYW1xcHdlcnR5dWlvcGFz" }),
-                    // v0.2.3.7 P0-2 新增：6 项审计 Critical-2 合成回归用例
                     new RedactTestCase("audit-ticket-equals-base64url",
                         "ticket=abc_def-12345",
                         new[] { "abc_def-12345" }),
@@ -767,7 +712,6 @@ namespace SteamP2PFriends.Shared
                     new RedactTestCase("audit-cert-payload-base64url",
                         "cert: abc-def_123456",
                         new[] { "abc-def_123456" }),
-                    // v0.2.3.8 P0-A 新增：5 项审计 v0.2.3.7 Critical-1 合成回归用例
                     new RedactTestCase("audit-uppercase-fqdn",
                         "Resolving SERVER.EXAMPLE.COM failed",
                         new[] { "SERVER.EXAMPLE.COM", "SERVER.EXAMPLE", "EXAMPLE.COM" }),
@@ -800,7 +744,6 @@ namespace SteamP2PFriends.Shared
                     if (leaked)
                     {
                         fail++;
-                        // v0.2.3.7 P0-2 修复：失败日志只记 case 名，不打印 needle/redacted output
                         //   避免在失败日志中泄漏可能含敏感内容的 needle 或部分脱敏输出
                         RoleLogger.Error("[Shared]",
                             $"[Diag] [D-Redact-SelfTest] FAIL [{tc.Label}] case-failed-redaction-leak-detected");

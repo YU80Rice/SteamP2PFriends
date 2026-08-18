@@ -9,7 +9,6 @@ using System.Reflection;
 namespace SteamP2PFriends.Patches
 {
     /// <summary>
-    /// Stage 10 v5 runtime fallback for listen-host deaths.
     ///
     /// Report-2 proved that PlayerLife.onPlayerDied was not delivered even though the authoritative
     /// host PlayerLife transitioned to dead. This patch observes the already-committed result of

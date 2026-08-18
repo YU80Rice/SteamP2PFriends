@@ -6,7 +6,6 @@ using SteamP2PFriends.Shared;
 namespace SteamP2PFriends.Patches
 {
     /// <summary>
-    /// SteamworksServerMultiplayerService.close() Prefix（迁移自 LaunchP2PHostManager v2.11.0）。
     ///
     /// 策略：绝不调 LogOff/Shutdown，仅 SetAdvertiseServerActive(false) + isHosting=false。
     ///

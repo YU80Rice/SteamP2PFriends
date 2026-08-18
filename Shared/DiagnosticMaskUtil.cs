@@ -3,7 +3,6 @@ using System;
 namespace SteamP2PFriends.Shared
 {
     /// <summary>
-    /// v0.2.3.18 新增：D-Vis 诊断 patch 专用的脱敏工具类。
     ///
     /// 设计原则：
     ///   - 不输出完整 SteamID（仅前 8 位 + 后 4 位，如 76561199...2479）

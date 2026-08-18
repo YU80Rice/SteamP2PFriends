@@ -5,7 +5,6 @@ using System.Reflection;
 namespace SteamP2PFriends.Patches
 {
     /// <summary>
-    /// v0.2.3.19 D-Vis-14 诊断 patch（Unity Tag 错误源头追踪）。
     ///
     /// 目标：定位 "Tag: Undefined is not defined" 错误的源头。
     ///

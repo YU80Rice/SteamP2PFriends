@@ -5,13 +5,11 @@ using System.Text;
 namespace SteamP2PFriends.Shared
 {
     /// <summary>
-    /// Stage 10: world-status broadcast template/authority catalog (pure functions, no I/O).
     ///
     /// Product semantics: MC-style all-player system broadcast for the plugin listen-host world.
     /// Every event reaches host + approved guests + still-quarantined guests via the same
     /// unified sender (fromPlayer=null / toPlayer=null / useRichTextFormatting=false).
     ///
-    /// v3 structured death slots (Codex-Directive-Stage10-v3-StructuredDeathTemplates):
     /// - each ordinary death cause has EXACTLY 5 random slots (2 practical + 3 humorous);
     /// - each slot is a DeathMessageSlot { WithoutKiller, optional WithKiller };
     /// - the RNG picks ONE slot index 0..4 once; then the selected slot is rendered in the
@@ -364,7 +362,6 @@ namespace SteamP2PFriends.Shared
             return cause == EDeathCause.SUICIDE;
         }
 
-        // ===== EDeathCause -> catalog index (enum order is stable in U3-SDK v2022.3.62) =====
 
         internal static bool TryGetOrdinaryIndex(EDeathCause cause, out int index)
         {
@@ -381,7 +378,6 @@ namespace SteamP2PFriends.Shared
         // ===== Name sanitization (指令 F): pure, no I/O =====
 
         /// <summary>
-        /// Pure name normalization for world-broadcast display (P1-04):
         ///  - strips CR/LF/TAB and all Unicode C0/C1 control characters
         ///  - removes chars that could spoof a newline/system message (0x00-0x1F, 0x7F, 0x85,
         ///    Unicode line/paragraph separators 0x2028/0x2029)
@@ -612,7 +608,6 @@ namespace SteamP2PFriends.Shared
         }
     }
 
-    /// <summary>Stage 10 world-status broadcast kinds (projection layer only).</summary>
     internal enum EWorldBroadcastKind : byte
     {
         JoinApproved,

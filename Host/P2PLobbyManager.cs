@@ -33,7 +33,6 @@ namespace SteamP2PFriends.Host
         private static bool _linkOnReady;
         private static bool _linkLobbyCalled;
 
-        // v0.2.3.23 P0-C3：pending CallResult 取消所需的 SteamAPICall_t 句柄
         private static SteamAPICall_t _pendingCall;
         private static bool _hasPendingCall;
 
@@ -56,7 +55,6 @@ namespace SteamP2PFriends.Host
 
         public static void CreateRoom()
         {
-            // v0.2.3.23 P0-C2：未初始化时 fail-closed（审计报告-Codex §3 P0-Critical-2）
             //   未初始化意味着 DiagnosticBuildValid=false 或生命周期损坏，
             //   不得自动降级到 DirectHost 绕过 INVALID 门控。
             if (!_initialized || _lobbyCreated == null)
@@ -90,18 +88,15 @@ namespace SteamP2PFriends.Host
             SteamAPICall_t handle = SteamMatchmaking.CreateLobby(ELobbyType.k_ELobbyTypePrivate, 8);
             _lobbyCreated.Set(handle);
 
-            // v0.2.3.23 P0-C3：记录 pending 句柄用于 AbortHostStart 时取消
             _pendingCall = handle;
             _hasPendingCall = true;
         }
 
         /// <summary>
         /// 由 HostManager.OnServerHosted 调用：异步创建 lobby，Tick 检测 Ready 后自动 LinkLobbyForP2P。
-        /// v0.2.3.23 P0-C2：返回 bool 表示是否真正进入 Creating 流程。
         /// </summary>
         public static bool CreateRoomAndLinkOnReady()
         {
-            // v0.2.3.23 P0-C2：fail-closed 守卫
             //   未初始化时返回 false，调用方必须检查返回值并进入 AbortHostStart。
             //   不得在此处自动 EnableDirectHostMode（审计明确禁止降级绕过 INVALID 门控）。
             if (!_initialized || _lobbyCreated == null)
@@ -227,7 +222,6 @@ namespace SteamP2PFriends.Host
 
         private static void OnLobbyCreated(LobbyCreated_t callback, bool ioFailure)
         {
-            // v0.2.3.23 P0-C3：回调触发即表示 pending 已完成，清除 pending 标记
             _hasPendingCall = false;
             _pendingCall = default(SteamAPICall_t);
 
@@ -286,7 +280,6 @@ namespace SteamP2PFriends.Host
         {
             State = EP2PLobbyState.None;
             LastError = null;
-            // v0.2.3.23 P0-C3：Reset 也需清理 pending 与链接标志
             _linkOnReady = false;
             _linkLobbyCalled = false;
             _createStartedRealtime = 0f;
@@ -294,8 +287,6 @@ namespace SteamP2PFriends.Host
         }
 
         /// <summary>
-        /// v0.2.3.23 P0-C3：AbortHostStart / StopP2PServer / 新会话开始时调用。
-        /// 审计报告-Codex §3 P0-Critical-3 要求：
         ///   - State=None
         ///   - LastError 清理
         ///   - _linkOnReady=false / _linkLobbyCalled=false
@@ -323,7 +314,6 @@ namespace SteamP2PFriends.Host
         }
 
         /// <summary>
-        /// v0.2.3.23 P0-C3：取消 pending CallResult。
         /// Steamworks.NET 的 CallResult 没有公开 Cancel API，但可以解除 Set 绑定。
         /// 通过重新 Set(default) 解除 callback 绑定，并标记 pending 已取消。
         /// </summary>
@@ -351,7 +341,6 @@ namespace SteamP2PFriends.Host
 
         private static void NotifyStateChanged()
         {
-            // v0.2 不使用 StateChanged 事件，状态变化由 Tick 轮询消费
         }
 
         private static string DescribeResult(EResult result)

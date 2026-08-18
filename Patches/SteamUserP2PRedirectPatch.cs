@@ -17,7 +17,6 @@ namespace SteamP2PFriends.Patches
     /// 本 patch 把 12 个关键 SteamGameServerNetworkingSockets 方法重定向到
     /// SteamNetworkingSockets（SteamUser identity）。
     ///
-    /// v0.2.1 门控策略（修复 Fable 5 审计 F-1）：
     ///   - P2P 模式（HostMode == EHostMode.P2P）：启用重定向，监听落到 SteamUser identity，
     ///     与 LinkLobbyForP2P 写入的个人 SteamID 精确配对
     ///   - LAN 模式（HostMode == EHostMode.LAN）：放行原生 SteamGameServerNetworkingSockets，
@@ -67,7 +66,6 @@ namespace SteamP2PFriends.Patches
         {
             if (!ShouldRedirect) return true;
             __result = SteamNetworkingSockets.CreateListenSocketP2P(nLocalVirtualPort, nOptions, pOptions);
-            // v0.2.2.2：改用 Info 级别，确保双机测试时一定打印（InfoVerbose 依赖 VerboseLog 配置）
             RoleLogger.Info("[Host]", $"[P2P-SteamUser] CreateListenSocketP2P 重定向到 SteamUser identity (handle={__result.m_HSteamListenSocket})");
             return false;
         }
@@ -76,7 +74,6 @@ namespace SteamP2PFriends.Patches
         [HarmonyPrefix]
         public static bool AcceptConnection_Prefix(ref EResult __result, HSteamNetConnection hConn)
         {
-            // v0.2.3.5 P0-1：显式记录服务端接纳结果（审计第五次审计 P0-1）
             // 不论 ShouldRedirect 与否，都先记录一次调用事实与 connection state
             try
             {
@@ -100,7 +97,6 @@ namespace SteamP2PFriends.Patches
             if (!ShouldRedirect)
             {
                 // 不重定向：放行原生 SteamGameServerNetworkingSockets.AcceptConnection
-                // v0.2.3.6 P1：原生 EResult 由 Postfix 记录（ShouldRedirect=false 时 Postfix 仍会触发）
                 return true;
             }
 
@@ -118,9 +114,7 @@ namespace SteamP2PFriends.Patches
         }
 
         /// <summary>
-        /// v0.2.3.6 P1：AcceptConnection Postfix - 仅在 ShouldRedirect=false（原生路径）时记录 EResult。
         /// ShouldRedirect=true 时 Prefix 已记录，Postfix 跳过避免重复。
-        /// 满足审计 v0.2.3.5 验收报告 Medium-3 要求的"ShouldRedirect=false 时也记录返回值"。
         /// </summary>
         [HarmonyPatch(typeof(SteamGameServerNetworkingSockets), nameof(SteamGameServerNetworkingSockets.AcceptConnection))]
         [HarmonyPostfix]
@@ -143,7 +137,6 @@ namespace SteamP2PFriends.Patches
         [HarmonyPrefix]
         public static bool SetConnectionPollGroup_Prefix(ref bool __result, HSteamNetConnection hConn, HSteamNetPollGroup hPollGroup)
         {
-            // v0.2.3.5 P0-1：显式记录 SetConnectionPollGroup 调用事实（审计第五次审计 P0-1）
             try
             {
                 ulong remoteSteamId = 0;
@@ -178,7 +171,6 @@ namespace SteamP2PFriends.Patches
         }
 
         /// <summary>
-        /// v0.2.3.6 P1：SetConnectionPollGroup Postfix - 仅在 ShouldRedirect=false（原生路径）时记录 bool 返回值。
         /// </summary>
         [HarmonyPatch(typeof(SteamGameServerNetworkingSockets), nameof(SteamGameServerNetworkingSockets.SetConnectionPollGroup))]
         [HarmonyPostfix]
@@ -202,7 +194,6 @@ namespace SteamP2PFriends.Patches
         public static bool CloseConnection_Prefix(ref bool __result, HSteamNetConnection hPeer,
             int nReason, string pszDebug, bool bEnableLinger)
         {
-            // v0.2.3.2 P0-4 D-9：SNS CloseConnection 诊断日志（关闭方/handle/reason/debug/linger）
             try
             {
                 ulong remoteSteamId = 0;

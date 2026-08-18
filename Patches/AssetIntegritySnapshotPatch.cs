@@ -10,9 +10,6 @@ using SteamP2PFriends.Shared;
 namespace SteamP2PFriends.Patches
 {
     /// <summary>
-    /// v0.2.3.14 P0-B：AssetIntegritySnapshot 双端只读诊断器。
-    /// v0.2.3.15 P0-C：改为 manual registration（PatchAll 在泛型类上静默失败）。
-    /// v0.2.3.16 修复：ServerInvokePrefix 参数名匹配 vanilla arg1..arg6（Harmony 按参数名注入）。
     ///
     /// 触发背景：第九次-2/3 双机测试客机均被 vanilla 资产 hash 校验踢出（CUSTOM(57)）。
     /// 客机端只能看到 serverHash（serverEffective），无法定位两端 effective hash 差异的具体环节。
@@ -29,12 +26,10 @@ namespace SteamP2PFriends.Patches
     ///           + clientEffective（Hash.combine(asset.hash, originMasterBundle.hash) 或 asset.hash）
     ///           + serverHash（参数）+ Hash.verifyHash(clientEffective, serverHash) 结果
     ///
-    /// v0.2.3.15 P0-C 修复（第九次-4 审计）：
     ///   - 移除 [HarmonyPatch] attribute（PatchAll 在泛型类 ClientStaticMethod&lt;,...&gt;.Invoke 上静默失败）
     ///   - Prefix 改为 public static，由 Plugin.RegisterAssetIntegritySnapshotPatches() 手动登记
     ///   - 与 14 个 SteamGameServerNetworkingSockets wrapper patch 一致
     ///
-    /// v0.2.3.16 修复（第十次审计前置条件）：
     ///   - ServerInvokePrefix 参数名从语义化（guid/serverName/...）改回 vanilla arg1..arg6
     ///   - 根因：Harmony 按参数名注入，参数名不匹配时 _harmony.Patch 抛 ArgumentException
     ///     导致 Server-side 登记 FAIL（GetPatchedMethods 不包含）
@@ -119,10 +114,8 @@ namespace SteamP2PFriends.Patches
         /// 注意：此 Prefix 会 patch 所有 ClientStaticMethod&lt;Guid,string,string,byte[],string,string&gt;.Invoke 调用，
         /// 但只有 __instance == Assets.SendKickForHashMismatch 时才输出诊断。
         ///
-        /// v0.2.3.15 P0-C：改为 public static + 移除 [HarmonyPatch] attribute，
         /// 由 Plugin.RegisterAssetIntegritySnapshotPatches() 手动登记。
         ///
-        /// v0.2.3.16 修复（外部审计要求）：参数名必须匹配 vanilla arg1..arg6，
         /// Harmony 按参数名注入，参数名不匹配会导致 _harmony.Patch 抛 ArgumentException，
         /// 进而导致 Server-side 登记 FAIL（GetPatchedMethods 不包含）。
         /// vanilla 源码（U3-SDK ClientStaticMethod.cs:713）：
@@ -142,7 +135,6 @@ namespace SteamP2PFriends.Patches
             string arg5,
             string arg6)
         {
-            // 语义化别名（v0.2.3.16：参数名已改回 vanilla arg1..arg6，内部用别名保持可读性）
             Guid guid = arg1;
             string serverName = arg2;
             string serverFriendlyName = arg3;
@@ -216,7 +208,6 @@ namespace SteamP2PFriends.Patches
         /// 客机端 Prefix：拦截 vanilla ReceiveKickForHashMismatch，输出完整 hash 计算快照。
         /// 此时客机已收到 serverHash 参数（serverEffective），可以与本地 clientEffective 对比。
         ///
-        /// v0.2.3.15 P0-C：改为 public static + 移除 [HarmonyPatch] attribute，
         /// 由 Plugin.RegisterAssetIntegritySnapshotPatches() 手动登记。
         /// </summary>
         [HarmonyPrefix]

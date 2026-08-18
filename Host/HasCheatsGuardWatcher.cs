@@ -10,7 +10,6 @@ namespace SteamP2PFriends.Host
     /// Provider.hasCheats 是 public static 字段（不是属性），无法用 Harmony patch getter（ldsfld IL 指令），
     /// 故采用每帧轮询降维打击 22 个命令的 if(!hasCheats) return 检查。
     ///
-    /// v0.2 重构：从 MonoBehaviour 改为 static class + Tick()。
     /// </summary>
     public static class HasCheatsGuardWatcher
     {

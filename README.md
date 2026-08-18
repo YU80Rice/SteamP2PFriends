@@ -3,7 +3,7 @@
 > 为 Unturned 提供无 U3DS 的便捷 listen-host 联机，同时支持 SteamID P2P 和 IPv4 直连。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
-[![Version](https://img.shields.io/badge/version-0.2.3.60--beta.1-blue.svg)](https://github.com/YU80Rice/SteamP2PFriends/releases/tag/v0.2.3.60-beta.1)
+[![Version](https://img.shields.io/badge/version-0.2.3.61--beta.2-blue.svg)](https://github.com/YU80Rice/SteamP2PFriends/releases)
 [![Status](https://img.shields.io/badge/status-Beta%20Prerelease-orange.svg)](https://github.com/YU80Rice/SteamP2PFriends/releases)
 
 ## 项目简介
@@ -29,12 +29,12 @@ IP 只负责寻址。玩家身份、审批与白名单始终使用 Steam Network
 - 客机聊天栏以 5 秒间隔显示审批剩余时间。
 - 创意工坊地图与缺失内容下载已通过双机测试。
 - listen-host 自然刷新物品由房主统一生成，避免主客机地面物品不一致和幽灵物品。
-- 运行时 Harmony 注册自检；关键补丁失效时 fail-closed，禁止不安全联机。
+- 运行时 Harmony 注册与兼容性自检；自身关键补丁失效时 fail-closed，第三方补丁按风险分级告警或阻断。
 
 ## 安装
 
 1. 房主和所有客机都需要安装相同版本的 BepInEx 和 SteamP2PFriends。
-2. 从 [GitHub Releases](https://github.com/YU80Rice/SteamP2PFriends/releases) 下载当前版本的 `SteamP2PFriends.zip`。
+2. 从 [GitHub Releases](https://github.com/YU80Rice/SteamP2PFriends/releases) 下载与双方一致的 `SteamP2PFriends-v<版本>.zip`。
 3. 将压缩包解压到 Unturned 游戏根目录。
 4. 确认 DLL 最终位于：
 
@@ -94,14 +94,14 @@ Windows 防火墙必须允许 Unturned 在相应网络上使用 UDP `27016`。
 
 | 项目 | 值 |
 |---|---|
-| BepInPlugin | `0.2.3.60` |
-| AssemblyVersion | `0.2.3.60` |
-| AssemblyFileVersion | `0.2.3.60` |
-| DLL SHA-256 | `03565C7E99804FF4AC5E980E766C52DFEB00E41F10BE34B388F8EBC9A417CE11` |
-| 静态测试 | `261/261 PASS` |
-| 双机总回归 | `Final-Beta-Test-20260813-1300`：PASS |
-| 发布标识 | `v0.2.3.60-beta.1` |
-| 发布状态 | Beta 1（首个公开 Beta 测试版本） |
+| BepInPlugin | `0.2.3.61` |
+| AssemblyVersion | `0.2.3.61` |
+| AssemblyFileVersion | `0.2.3.61` |
+| 当前构建 SHA-256 | `3031C999138E850AED61636032B1580FAFBC6DC35B2F1F3D673262C43C67FC89` |
+| 静态状态 | 当前 Unturned/BepInEx ABI 零警告构建；自动化测试 `268/268 PASS` |
+| 当前手动测试归档 | `Beta2-P2P-AHost-20260818-1300`：`AllOK=true` |
+| 发布标识 | `v0.2.3.61-beta.2` |
+| 发布状态 | Beta 2 公开预发布版 |
 
 ## 已验证边界与免责声明
 
@@ -116,9 +116,10 @@ Windows 防火墙必须允许 Unturned 在相应网络上使用 UDP `27016`。
 
 已验证边界与免责声明：
 
-- 本版本通过 P2P Beta 总回归，证据归档于 `Final-Beta-Test-20260813-1300`。
+- 当前版本的双端手动测试归档为 `Beta2-P2P-AHost-20260818-1300`，双方使用同一 DLL，归档摘要为 `AllOK=true`。部署与日志归档由测试人员手动控制；`TestLogs` 中的 CFG 哈希工具仅作可选辅助记录，不构成额外发布门。
 - SakuraFRP/公网穿透的最终可用性受第三方节点、NAT、运营商和防火墙影响；测试通过不构成网络可达性保证。
 - Steam 付费外观、第三方内容和未安装资源的表现取决于双方本地资源与原版下载机制，不构成插件对第三方资产的担保。
+- 不承诺与任意第三方 BepInEx/Harmony/原生注入工具共存。启动后可从 `BepInEx/config/SteamP2PFriends/p2p-harmony-compatibility.json` 获取 Harmony 冲突清单；连接、认证与 transport 关键目标上的冲突会在创建或加入 P2P 会话前阻断。
 - 本插件为 Beta 预发布版本，可能包含未覆盖的地图、模组、网络环境或 Unturned 更新兼容性问题；使用者应备份存档并自行承担联机、数据丢失和服务中断风险。
 
 ## 从源码构建

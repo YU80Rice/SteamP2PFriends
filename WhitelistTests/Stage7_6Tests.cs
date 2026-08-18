@@ -129,7 +129,11 @@ namespace SteamP2PFriends.WhitelistTests
         {
             // CoreCLR test runner cannot detour these Unity/Mono internal handlers (Harmony IL compile error).
             // Validate exact targets/signatures here; the in-game startup gate verifies real ownership/activation.
-            MethodBase readyTarget = LanTestDuplicateBypassPatch.LanTestReadyToConnectPatch.TargetMethod();
+            MethodBase readyTarget = P2PQuarantineReadyToConnectScopePatch.GetTargetMethod();
+            MethodInfo readyPrefix = AccessTools.Method(
+                typeof(P2PQuarantineReadyToConnectScopePatch), nameof(P2PQuarantineReadyToConnectScopePatch.Prefix));
+            MethodInfo readyFinalizer = AccessTools.Method(
+                typeof(P2PQuarantineReadyToConnectScopePatch), nameof(P2PQuarantineReadyToConnectScopePatch.Finalizer));
             Type invokeType = AccessTools.TypeByName(P2PQuarantineServerInvokeGatePatch.TargetTypeName);
             Type readerType = AccessTools.TypeByName("SDG.NetPak.NetPakReader");
             MethodInfo invokeTarget = invokeType == null || readerType == null ? null :
@@ -143,7 +147,8 @@ namespace SteamP2PFriends.WhitelistTests
                 "OnCreatePlayerEntryWithGrouping", new[] { typeof(SDG.Unturned.SteamPlayer) });
             MethodInfo decorator = AccessTools.Method(typeof(P2PPlayerListApprovalDecorator),
                 nameof(P2PPlayerListApprovalDecorator.Postfix));
-            return readyTarget != null && invokeTarget != null && invokePrefix != null &&
+            return readyTarget != null && readyPrefix != null && readyFinalizer != null &&
+                   invokeTarget != null && invokePrefix != null &&
                    normalFactory != null && groupedFactory != null && decorator != null;
         }
 

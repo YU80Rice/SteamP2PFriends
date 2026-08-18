@@ -9,14 +9,11 @@ using System.Text;
 namespace SteamP2PFriends.Patches
 {
     /// <summary>
-    /// v0.2.3.2 P0-D D-8：Provider.dismiss + RemoveClient Prefix+Postfix 诊断 patch。
     ///
-    /// v0.2.3.2 P0-7 修复（Codex 第三次审计）：
     ///   - session 清理从 dismiss Prefix 移到 Postfix（原 Prefix 先清理导致后续 RemoveClient 日志 sid=n/a）。
     ///   - RemoveClient Postfix 也调用 RemoveSession（双重保险，RemoveSession 幂等）。
     ///   - 所有日志使用 FormatPrefixFor 输出精确 sid。
     ///
-    /// v0.2.3.1 P0-5：新增 reject/kick/refuse 原因记录（在 ProviderRejectDiagnosticPatch.cs）。
     /// </summary>
     [HarmonyPatch(typeof(Provider), "dismiss")]
     public static class ProviderDismissDiagnosticPatch
@@ -30,7 +27,6 @@ namespace SteamP2PFriends.Patches
                 RoleLogger.Info("[Host]",
                     $"{DiagnosticContext.FormatPrefixFor(steamID.m_SteamID, "Provider.dismiss ENTER")} " +
                     $"steamId={steamID.m_SteamID} stack=\n{stack}");
-                // P0-7 修复：不在 Prefix 清理 session（否则后续 RemoveClient 日志 sid=n/a）
             }
             catch (System.Exception ex)
             {
@@ -43,13 +39,11 @@ namespace SteamP2PFriends.Patches
         {
             try
             {
-                // P0-7 修复：在 Postfix 清理 session（dismiss 完成后）
                 DiagnosticContext.RemoveSession(steamID.m_SteamID);
                 RoleLogger.Info("[Host]",
                     $"{DiagnosticContext.FormatPrefixFor(steamID.m_SteamID, "Provider.dismiss RETURNED")} " +
                     $"steamId={steamID.m_SteamID} session_removed=true");
 
-                // P0-E 修复：清理 PlayerInitializationTracker
                 if (Provider.clients != null)
                 {
                     foreach (SteamPlayer sp in Provider.clients)
@@ -109,13 +103,11 @@ namespace SteamP2PFriends.Patches
                     steamId = clientToRemove.playerID.steamID.m_SteamID;
                 }
 
-                // P0-7 修复：在 Postfix 清理 session（RemoveSession 幂等，dismiss Postfix 可能已清理）
                 if (steamId != 0)
                 {
                     DiagnosticContext.RemoveSession(steamId);
                 }
 
-                // P0-E 修复：清理 tracker
                 if (!ReferenceEquals(clientToRemove, null) && clientToRemove.player != null)
                 {
                     PlayerInitializationTracker.Remove(clientToRemove.player);

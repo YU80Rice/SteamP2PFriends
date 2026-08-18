@@ -11,7 +11,6 @@ using UnityEngine;
 namespace SteamP2PFriends.Client
 {
     /// <summary>
-    /// Stage 9-3 (v2): runtime contract used by the DNS controller to commit a resolved connection
     /// on the main thread. Test implementations substitute a fake to prove worker never connects.
     /// TryCaptureCurrentInput reads the live vanilla UI fields + DNS toggle on the main thread so
     /// the commit step can revalidate the exact current snapshot (no "display B, connect A").
@@ -102,7 +101,6 @@ namespace SteamP2PFriends.Client
     }
 
     /// <summary>
-    /// Stage 9-3 (v2): main-thread DNS direct-IP controller.
     ///
     /// Thread model:
     ///   - Async DNS worker only constructs an immutable ExplicitDnsResult and enqueues it via an
@@ -412,7 +410,6 @@ namespace SteamP2PFriends.Client
 
         /// <summary>
         /// v2 指令 D: accepts only InterNetwork (IPv4). Rejects 0.0.0.0, 255.255.255.255,
-        /// multicast 224.0.0.0/4 and IPv6. Uses the first valid address in DNS return order.
         /// </summary>
         internal static bool TrySelectFirstValidIpv4(IPAddress[] addresses,
             out IPv4Address selected, out string reason)
@@ -471,7 +468,6 @@ namespace SteamP2PFriends.Client
     }
 
     /// <summary>
-    /// Stage 9-3 (v2): production singleton holder. Created lazily with the system DNS backend and
     /// the production connect runtime. Plugin.Update drives Tick; RoutePatch calls TryBegin;
     /// OnDestroy / session reset / toggle-off calls CancelAndReset.
     /// </summary>

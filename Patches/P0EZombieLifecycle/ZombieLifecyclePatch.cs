@@ -9,7 +9,6 @@ using System.Reflection;
 namespace SteamP2PFriends.Patches.P0EZombieLifecycle
 {
     /// <summary>
-    /// v0.2.3.39 Zombie 生命周期 v6.6（Codex 第五十二次审计 §5 放行编码）：
     ///
     /// 根因（U3-SDK ZombieManager.cs:1448-1494 onBoundUpdated）：
     ///   - L1452 if (LevelNavigation.checkSafe(oldBound) && regions[oldBound].isNetworked)
@@ -22,36 +21,25 @@ namespace SteamP2PFriends.Patches.P0EZombieLifecycle
     ///         L1481 regions[newBound].isNetworked = true;
     ///       L1488 player.movement.loadedBounds[newBound].isZombiesLoaded = true;
     ///     本地主机进入 new bound 时，若 loadedBounds[newBound].isZombiesLoaded=false，会调用 generateZombies
-    ///     （即使该 bound 已由 P0-D 为远端客机 generate 过，仍会重复 generate）。
     ///
-    /// 修复方案（v6.6，Codex 第五十二次审计 §5 放行编码）：
     ///   - Prefix（VeryLow）：在 vanilla L1452/L1475 之前，临时修改两个标志位：
     ///     * TryProtectOldBound：当远端客机仍在 old bound 时，临时设置 regions[oldBound].isNetworked=false
     ///       （让 vanilla L1452 跳过 destroy）。Postfix 与 Finalizer 无条件幂等恢复。
-    ///     * TryProcessNewBound：当 newRegion.isNetworked=true（房主或 P0-D 已 generate 过）且
     ///       newLoadedBound.isZombiesLoaded=false（本地主机首次进入该 bound）时，临时设置
     ///       loadedBounds[newBound].isZombiesLoaded=true（让 vanilla L1475 跳过 generateZombies 分支）。
     ///       Finalizer 仅在异常时回滚。
     ///   - Postfix（High）：乐观路径，原方法成功后恢复 old isNetworked。
     ///   - Finalizer（High）：兜底无条件恢复 old isNetworked；仅在异常时回滚 new loaded；始终返回 __exception。
     ///
-    /// v6.6 关键修订（Codex 第五十一次审计 §3-§4）：
     ///   1. old/new 控制流完全独立：TryProtectOldBound + TryProcessNewBound 两条独立 try-catch 路径，互不阻断。
     ///   2. Finalizer 无条件幂等恢复 old（无论 __exception 是否为空）。
     ///   3. new-bound 仅在原方法异常时回滚。
     ///   4. Finalizer 始终原样返回 __exception（不吞异常）。
     ///
     /// Harmony Priority 设计：
-    ///   - Prefix=VeryLow (-200)：让诊断 Prefix (Normal=0) 与 P0-D Prefix (Low=-100) 先执行。
     ///   - Postfix=High (100)：让诊断 Postfix (Normal=0) 先记录 vanilla 后状态，然后功能 Postfix 恢复。
     ///   - Finalizer=High (100)：让诊断 Finalizer (Normal=0) 先记录异常，然后功能 Finalizer 兜底恢复。
     ///
-    /// 与 P0-D / P0-C1 的职责边界：
-    ///   - v6.6 处理本地主机（IsLocalPlayer=true）切换 bound 的生命周期。
-    ///   - P0-D 处理远端客机（IsLocalPlayer=false）进入 bound 的 generateZombies 补充。
-    ///   - P0-C1 处理 updateRegionsAndSendZombieStates 的周期状态广播。
-    ///   - v6.6 与 P0-D 玩家角色互斥（IsLocalPlayer=true vs false），同一调用中只会其中之一实际介入。
-    ///   - v6.6 与 P0-C1 通过不同的原方法（onBoundUpdated vs updateRegionsAndSendZombieStates）隔离。
     /// </summary>
     public static class ZombieLifecyclePatch
     {
@@ -72,7 +60,6 @@ namespace SteamP2PFriends.Patches.P0EZombieLifecycle
             PrefixRegistered && PostfixRegistered && FinalizerRegistered;
 
         /// <summary>
-        /// v0.2.3.39 v6.6 手动登记：identity-based 防重复登记。
         /// 三种 Patch 类型（Prefix/Postfix/Finalizer）分别登记。
         /// </summary>
         public static bool RegisterManual(Harmony harmony)
@@ -147,7 +134,6 @@ namespace SteamP2PFriends.Patches.P0EZombieLifecycle
                 FinalizerRegistered = WorldSyncDiagnosticCore.IsPatchRegistered(
                     typeof(ZombieManager), "onBoundUpdated", fin, HarmonyPatchType.Finalizer, VanillaOnBoundUpdatedParamTypes);
 
-                // v6.6 owner 自检：使用 ZombieLifecycleOwnerVerify 进行精确比较
                 // sameOwnerOtherCount 仅信息输出，不作为失败条件
                 bool ownerVerifyOk = ZombieLifecycleOwnerVerify.VerifyAllPatches(
                     AccessTools.Method(typeof(ZombieManager), "onBoundUpdated", VanillaOnBoundUpdatedParamTypes),
@@ -178,9 +164,7 @@ namespace SteamP2PFriends.Patches.P0EZombieLifecycle
             }
         }
 
-        // ============= onBoundUpdated Prefix（v6.6 修订：两条独立路径） =============
         // U3-SDK ZombieManager.cs:1448 private void onBoundUpdated(Player player, byte oldBound, byte newBound)
-        // [HarmonyPriority(Priority.VeryLow)] 确保在诊断 Prefix (Normal) + P0-D Prefix (Low) 之后执行
         [HarmonyPriority(Priority.VeryLow)]
         [HarmonyPrefix]
         [HarmonyPatch(typeof(ZombieManager), "onBoundUpdated")]
@@ -193,7 +177,6 @@ namespace SteamP2PFriends.Patches.P0EZombieLifecycle
             // CommonGuard 是 old/new 共享的前置条件
             if (!CommonGuard(player)) return;
 
-            // v6.6 关键修订：两条独立路径，互不阻断
             // old 失败不得阻止 new；new 失败不得撤销或阻止 old
             TryProtectOldBound(player, oldBound, ref __state);
             TryProcessNewBound(player, newBound, ref __state);
@@ -223,7 +206,6 @@ namespace SteamP2PFriends.Patches.P0EZombieLifecycle
             }
         }
 
-        // ============= onBoundUpdated Finalizer（v6.6 修订：无条件恢复 old） =============
         [HarmonyPriority(Priority.High)]
         [HarmonyFinalizer]
         [HarmonyPatch(typeof(ZombieManager), "onBoundUpdated")]
@@ -232,7 +214,6 @@ namespace SteamP2PFriends.Patches.P0EZombieLifecycle
             ZombieLifecycleState __state,
             System.Exception __exception)
         {
-            // v6.6 关键修订：无条件执行 old-bound 幂等恢复
             // 理由：Postfix 恢复过程自身异常时，old Region 可能永久停留在 isNetworked=false
             if (__state.oldWasModified)
             {
@@ -305,7 +286,6 @@ namespace SteamP2PFriends.Patches.P0EZombieLifecycle
         }
 
         /// <summary>
-        /// TryProcessNewBound：当 newRegion.isNetworked=true（房主或 P0-D 已 generate 过）且
         /// newLoadedBound.isZombiesLoaded=false（本地主机首次进入该 bound）时，
         /// 临时设置 loadedBounds[newBound].isZombiesLoaded=true。让 vanilla L1475 跳过 generateZombies 分支。
         /// Finalizer 仅在异常时回滚。
@@ -317,7 +297,6 @@ namespace SteamP2PFriends.Patches.P0EZombieLifecycle
                 // new-bound 守门（6 项）
                 if (!NewBoundGuards(player, newBound, out ZombieRegion newRegion, out LoadedBound newLoadedBound)) return;
 
-                // 仅当 newRegion.isNetworked=true（房主或 P0-D 已 generate 过）才介入
                 if (!newRegion.isNetworked) return;
 
                 // 仅当 newLoadedBound.isZombiesLoaded=false（本地主机首次进入该 bound）才介入
@@ -375,7 +354,6 @@ namespace SteamP2PFriends.Patches.P0EZombieLifecycle
             // 守门 6: HostManager.ShouldProcessClientHostListen()（统一 Listen Host 判定，含 !Dedicator.IsDedicatedServer）
             if (!HostManager.ShouldProcessClientHostListen()) return false;
 
-            // 守门 7: channel.IsLocalPlayer（v6.6 只处理本地主机切换）
             if (!channel.IsLocalPlayer) return false;
 
             return true;

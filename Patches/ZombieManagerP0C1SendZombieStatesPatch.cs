@@ -8,7 +8,6 @@ using System.Reflection.Emit;
 namespace SteamP2PFriends.Patches
 {
     /// <summary>
-    /// v0.2.3.33 P0-C-1 僵尸周期性状态广播（Codex 第二十一次双机测试外部审计 §6.2 裁决事项 2 授权实施）：
     ///
     /// 根因（U3-SDK ZombieManager.cs:1653-1684 updateRegionsAndSendZombieStates）：
     ///   L1655-1658 遍历 regions，调用 region.UpdateRegion()
@@ -30,7 +29,6 @@ namespace SteamP2PFriends.Patches
     ///   - 主机日志：wouldSendZombieStates=False（15+ 次）
     ///   - 客机日志：0 次 ReceiveZombieStates
     ///
-    /// 修复方案（Codex §6.2 裁决事项 2 + §4.1 路线 A）：
     ///   Transpiler 替换 L1662 的 Dedicator.IsDedicatedServer 调用
     ///   为 ListenRegionSyncEligibility.IsDedicatedOrP2PHost() 调用。
     ///
@@ -56,8 +54,6 @@ namespace SteamP2PFriends.Patches
     ///   - 与 ZombieManagerWorldSyncDiagnosticPatch 的 updateRegionsAndSendZombieStates Prefix 共存
     ///     （Prefix 在 Transpiler 修改后的方法上仍会执行，诊断日志不受影响）
     ///
-    /// 禁止项（Codex §6.2 裁决事项 5）：
-    ///   - 不夹带 P0-E / ItemManager.dropItem 修改
     ///   - 不替换 AnimalManager.tickAnimal L1019
     ///   - 不替换 AnimalManager.addAnimal L523
     ///   - 不替换 VehicleManager.Update L2853
@@ -275,7 +271,6 @@ namespace SteamP2PFriends.Patches
         }
 
         /// <summary>
-        /// v0.2.3.33 P0-C-1 僵尸周期性状态广播 Transpiler 主实现。
         /// 替换 vanilla updateRegionsAndSendZombieStates 中的 Dedicator.get_IsDedicatedServer() 调用
         /// 为 ListenRegionSyncEligibility.IsDedicatedOrP2PHost()。
         ///

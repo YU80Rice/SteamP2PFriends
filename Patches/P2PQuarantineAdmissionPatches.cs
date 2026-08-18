@@ -44,24 +44,42 @@ namespace SteamP2PFriends.Patches
         internal const string TargetTypeName = "SDG.Unturned.ServerMessageHandler_ReadyToConnect";
         internal static bool RegistrationValid { get; private set; }
 
+        internal static MethodInfo GetTargetMethod()
+        {
+            Type targetType = AccessTools.TypeByName(TargetTypeName);
+            Type readerType = AccessTools.TypeByName("SDG.NetPak.NetPakReader");
+            return targetType == null || readerType == null ? null :
+                AccessTools.Method(targetType, "ReadMessage", new[] { typeof(ITransportConnection), readerType });
+        }
+
         internal static void RegisterManual(Harmony harmony)
         {
             RegistrationValid = false;
-            Type targetType = AccessTools.TypeByName(TargetTypeName);
-            MethodInfo original = targetType == null ? null : AccessTools.Method(targetType, "ReadMessage",
-                new[] { typeof(ITransportConnection), AccessTools.TypeByName("SDG.NetPak.NetPakReader") });
-            Type patchType = typeof(LanTestDuplicateBypassPatch.LanTestReadyToConnectPatch);
-            MethodInfo prefix = AccessTools.Method(patchType, nameof(LanTestDuplicateBypassPatch.LanTestReadyToConnectPatch.Prefix));
-            MethodInfo finalizer = AccessTools.Method(patchType, nameof(LanTestDuplicateBypassPatch.LanTestReadyToConnectPatch.Finalizer));
+            MethodInfo original = GetTargetMethod();
+            MethodInfo prefix = AccessTools.Method(typeof(P2PQuarantineReadyToConnectScopePatch), nameof(Prefix));
+            MethodInfo finalizer = AccessTools.Method(typeof(P2PQuarantineReadyToConnectScopePatch), nameof(Finalizer));
             if (original == null || prefix == null || finalizer == null)
             {
                 RoleLogger.Error("[Shared]", "[P2P-Quarantine] ReadyToConnect scope target unresolved");
                 return;
             }
 
+            if (!HasOwnedPatch(original, prefix, true) || !HasOwnedPatch(original, finalizer, false, true))
+                harmony.Patch(original, prefix: new HarmonyMethod(prefix), finalizer: new HarmonyMethod(finalizer));
+
             RegistrationValid = HasOwnedPatch(original, prefix, true) && HasOwnedPatch(original, finalizer, false, true);
             if (!RegistrationValid)
                 RoleLogger.Error("[Shared]", "[P2P-Quarantine] ReadyToConnect scope registration failed");
+        }
+
+        internal static void Prefix(ITransportConnection transportConnection)
+        {
+            P2PQuarantineReadyToConnectScope.Enter(transportConnection);
+        }
+
+        internal static void Finalizer()
+        {
+            P2PQuarantineReadyToConnectScope.Exit();
         }
 
         private static bool HasOwnedPatch(MethodBase original, MethodInfo expected,

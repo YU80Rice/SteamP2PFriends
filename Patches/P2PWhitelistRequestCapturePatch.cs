@@ -8,9 +8,7 @@ using System;
 namespace SteamP2PFriends.Patches
 {
     /// <summary>
-    /// Stage 7-3 v3 首次加入审批捕获 patch（Codex 接管蓝图 v3 §3.3）。
     ///
-    /// v3 P0-REJECT-CAPTURE-AFFINITY-03 修复：
     ///   - Prefix 只调 TryEnqueueRejectedTransportId（不访问 Unity/Provider/whitelist）
     ///   - 业务逻辑（Provider/Time/Snapshot）全部移到主线程 drain
     ///   - Prefix 继续为 void，任何异常只记录且继续原版 reject
@@ -30,7 +28,6 @@ namespace SteamP2PFriends.Patches
         {
             try
             {
-                // Stage 7-6: every rejection terminates any one-connection reservation.
                 if (transportConnection != null)
                     P2PQuarantineAdmissionService.OnRejected(transportConnection);
                 if (rejection != ESteamRejection.WHITELISTED) return;

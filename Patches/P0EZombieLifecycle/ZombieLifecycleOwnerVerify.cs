@@ -7,18 +7,15 @@ using System.Reflection;
 namespace SteamP2PFriends.Patches.P0EZombieLifecycle
 {
     /// <summary>
-    /// v0.2.3.39 Zombie 生命周期 v6.6 owner 自检（Codex 第五十三次审计 §3 P0-1 返修）：
     ///
     /// 对 `ZombieManager.onBoundUpdated(Player, byte, byte)` 的三种 Patch（Prefix/Postfix/Finalizer）
     /// 执行精确 owner + MethodInfo identity + count 自检。
     ///
-    /// v6.6 返修要点（Codex 第五十三次审计 §3.2）：
     ///   - 旧实现仅检查 `methodMatched=true`，重复登记两个相同 Hook 时仍可能通过
     ///   - 新实现改为 count-based 裁决：`exactCount == 1 && priorityMatchCount == 1`
     ///   - 实现 `IsSameMethodInfo` 精确比较 MethodInfo identity
     ///   - 输出 `exact=1/1 priorityMatch=1/1 sameOwnerOtherMethod foreignOwnerCount duplicateExpected`
     ///
-    /// 自检规则（Codex 第二十四次审计 §Harmony 多 Prefix 同 owner 共存规则 + 第五十三次 §3.2 exact-count）：
     ///   - 同 owner (Harmony ID) + 同 vanilla 方法 + 不同 PatchMethod 的多个 Prefix/Postfix/Finalizer 是合法共存
     ///   - `exactCount == 1`：expected MethodInfo 必须恰好出现 1 次（拒绝重复登记）
     ///   - `priorityMatchCount == 1`：expected MethodInfo + 期望 Priority 必须恰好出现 1 次
@@ -132,12 +129,10 @@ namespace SteamP2PFriends.Patches.P0EZombieLifecycle
                 }
                 else
                 {
-                    // 同 owner 但不同 MethodInfo（合法共存，如 P0-D Prefix）
                     sameOwnerOtherMethodCount++;
                 }
             }
 
-            // Codex §3.2：成功条件为 exactCount == 1 && priorityMatchCount == 1
             bool ok = exactCount == 1 && priorityMatchCount == 1;
 
             string summary =
@@ -179,7 +174,6 @@ namespace SteamP2PFriends.Patches.P0EZombieLifecycle
         }
 
         /// <summary>
-        /// 精确比较两个 MethodInfo identity（Codex 第五十三次审计 §3.2）。
         ///
         /// 比较顺序（短路 OR）：
         ///   1. ReferenceEquals(a, b) -> true（同一引用）
