@@ -1,0 +1,124 @@
+name: Bug report
+description: 报告 SteamP2PFriends 的可复现问题，并提交双端日志。
+title: "[Bug] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        请先确认双方都使用同一版本的 SteamP2PFriends，并完全退出游戏后重新启动。
+        联机问题必须同时提供房主和客机的日志；仅截图或仅一份日志无法判断是网络、环境冲突还是插件行为。
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: 问题分类
+      description: 请选择最接近的分类；不确定时选择“其他/无法判断”。
+      options:
+        - 无法连接、排队后无响应或认证超时
+        - 房主无法创建 P2P 世界或世界启动后立即退出
+        - 已连接但玩家、移动或世界状态不同步
+        - 背包、装备、拾取、丢弃或物品显示异常
+        - 白名单、加入审批、房间设置或玩家上限异常
+        - 断线、重连、保存或重新进入世界异常
+        - 与其他 BepInEx 插件冲突
+        - 性能、卡顿、日志刷屏或内存异常
+        - 其他/无法判断
+    validations:
+      required: true
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: 问题概述
+      description: 用一句话说明谁做了什么，实际发生了什么。
+      placeholder: 例如：客机输入房主 SteamID 后进入队列，约 30 秒后提示“服务器无响应”。
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction_steps
+    attributes:
+      label: 复现步骤
+      description: 请按发生顺序填写。每一种连接方式请分开测试，避免在同一进程内连续切换。
+      placeholder: |
+        1. 房主：...
+        2. 客机：...
+        3. 连接方式（SteamID/Direct-IP/其他）：...
+        4. 结果：...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected_and_actual
+    attributes:
+      label: 预期结果与实际结果
+      placeholder: |
+        预期：...
+        实际：...
+        是否每次都发生：是/否，约 X 次中的 Y 次。
+    validations:
+      required: true
+
+  - type: dropdown
+    id: affected_roles
+    attributes:
+      label: 受影响角色
+      options:
+        - 仅房主
+        - 仅客机
+        - 房主和客机都受影响
+        - 尚不确定
+    validations:
+      required: true
+
+  - type: dropdown
+    id: connection_method
+    attributes:
+      label: 连接方式
+      options:
+        - SteamID
+        - Direct-IP
+        - 两种方式都失败
+        - 不适用或尚未连接到此步骤
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: 双端环境
+      description: 请分别填写房主和客机。不要只写“最新版”。
+      placeholder: |
+        房主：Windows 版本；Unturned 版本/构建日期；BepInEx 版本；SteamP2PFriends 版本；SteamP2PFriends.dll SHA-256（如可取得）。
+        客机：Windows 版本；Unturned 版本/构建日期；BepInEx 版本；SteamP2PFriends 版本；SteamP2PFriends.dll SHA-256（如可取得）。
+        双端所有其他 BepInEx 插件名称与版本：...
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 双端日志（必填）
+      description: |
+        将以下文件直接拖入此区域上传：房主和客机各一份 BepInEx/LogOutput.log。
+        如发生崩溃、白屏或无窗口响应，请同时上传双方 Player.log。请保留故障前后完整日志，不要只粘贴最后几行。
+        日志可能含 IP 或 SteamID；可以脱敏私人信息，但不要删除时间、异常、连接状态和插件加载行。
+      placeholder: 请将 Host LogOutput.log 与 Client LogOutput.log 拖放到此处，然后简述文件分别属于哪一端。
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional_evidence
+    attributes:
+      label: 补充证据（可选）
+      description: 可附截图、录像、测试归档 Case ID、错误码、断线时间和网络环境说明。
+
+  - type: checkboxes
+    id: evidence_confirmation
+    attributes:
+      label: 提交确认
+      options:
+        - label: 我已附上房主和客机的完整 LogOutput.log，或已在上方说明无法取得的原因。
+          required: true
+        - label: 我已列出双方的其他 BepInEx 插件，或确认双方只安装 SteamP2PFriends。
+          required: true
