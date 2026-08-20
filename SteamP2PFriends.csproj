@@ -183,6 +183,7 @@
     <Compile Include="Patches\ItemManagerRegionSyncPatch.cs" />
     <Compile Include="Patches\ResourceManagerRegionSyncPatch.cs" />
     <Compile Include="Patches\ObjectManagerRegionSyncPatch.cs" />
+    <Compile Include="Patches\LevelObjectRemoteCollisionPatch.cs" />
     <Compile Include="Patches\AssetIntegritySnapshotPatch.cs" />
     <Compile Include="Patches\PlayerClothingVisibilityDiagnosticPatch.cs" />
     <Compile Include="Patches\PlayerClothingLoadAppearanceFixPatch.cs" />

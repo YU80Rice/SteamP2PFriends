@@ -123,6 +123,7 @@ namespace SteamP2PFriends.Host
                     Patches.ItemManagerRegionSyncPatch.ResetAll();
                     Patches.ResourceManagerRegionSyncPatch.ResetAll();
                     Patches.ObjectManagerRegionSyncPatch.ResetAll();
+                    Patches.LevelObjectRemoteCollisionPatch.ResetAll();
                     RemotePlayerRenderProbe.ResetAll();
                     Patches.WorldSyncDiagnosticCore.ResetAll();
                     Patches.P2PListenHostCommandPermissionPatch.ResetForSession();
@@ -1067,6 +1068,8 @@ namespace SteamP2PFriends.Host
             {
                 if (wasP2P)
                 {
+                    try { Patches.LevelObjectRemoteCollisionPatch.ResetAll(); }
+                    catch (Exception collisionEx) { RoleLogger.Warn("[Host]", "[LevelObjectCollision] ResetAll (Abort) 异常: " + collisionEx.GetType().Name); }
                     string stage6BFailure;
                     if (!TryCleanupStage6BForExit(out stage6BFailure))
                         RoleLogger.Error("[Host]", "[Stage6B] exit cleanup failed: " + stage6BFailure);
@@ -1195,6 +1198,8 @@ namespace SteamP2PFriends.Host
             {
                 if (wasP2P)
                 {
+                    try { Patches.LevelObjectRemoteCollisionPatch.ResetAll(); }
+                    catch (Exception collisionEx) { RoleLogger.Warn("[Host]", "[LevelObjectCollision] ResetAll (Stop) 异常: " + collisionEx.GetType().Name); }
                     string stage6BFailure;
                     if (!TryCleanupStage6BForExit(out stage6BFailure))
                         RoleLogger.Error("[Host]", "[Stage6B] exit cleanup failed: " + stage6BFailure);

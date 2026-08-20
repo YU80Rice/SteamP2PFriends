@@ -21,7 +21,7 @@ namespace SteamP2PFriends
     /// 该插件仅支持 SteamUser P2P listen-host：房主客户端同时承担原版服务端和本地客户端。
     /// 不启动 U3DS，不修改全局 Dedicated Server 判定，也不伪造原版加载完成状态。
     /// </summary>
-    [BepInPlugin("com.yu80rice.steamp2pfriends", "SteamP2PFriends", "0.2.3.62")]
+    [BepInPlugin("com.yu80rice.steamp2pfriends", "SteamP2PFriends", "0.2.3.63")]
     [BepInDependency("com.yu80rice.launchinventorytidy", BepInDependency.DependencyFlags.SoftDependency)]
     public class SteamP2PFriendsPlugin : BaseUnityPlugin
     {
@@ -113,7 +113,7 @@ namespace SteamP2PFriends
             }
 
             RoleLogger.Info("[Shared]",
-                $"[Startup] version=0.2.3.62 p2pEnabled={EnableP2PCoop.Value} " +
+                $"[Startup] version=0.2.3.63 p2pEnabled={EnableP2PCoop.Value} " +
                 $"verboseDiagnostics={VerboseLog.Value} routeDiagnostics={RouteDiagnostics.Value} " +
                 $"worldStatus={P2PWorldStatusBroadcaster.ActivationState}");
 
@@ -384,6 +384,12 @@ namespace SteamP2PFriends
 
                 if (steamId != 0UL)
                 {
+                    try { Patches.LevelObjectRemoteCollisionPatch.RemoveRemotePlayer(steamId); }
+                    catch (System.Exception collisionEx)
+                    {
+                        RoleLogger.Error("[Shared]", $"OnEnemyDisconnectedHandler(LevelObjectCollision) 异常: {collisionEx.Message}");
+                    }
+
                     // callback BEFORE quarantine cleanup. The broadcaster reads its own session
                     // projection state (registered only for AlreadyApproved/Activated) and cleans up
                     // player-level state unconditionally. No second Provider.onEnemyDisconnected
@@ -738,6 +744,7 @@ namespace SteamP2PFriends
                 Patches.ItemManagerRegionSyncPatch.ResetAll();
                 Patches.ResourceManagerRegionSyncPatch.ResetAll();
                 Patches.ObjectManagerRegionSyncPatch.ResetAll();
+                Patches.LevelObjectRemoteCollisionPatch.ResetAll();
                 SteamP2PFriends.Host.RemotePlayerRenderProbe.ResetAll();
                 SteamP2PFriends.Client.ClientRemotePlayerRenderProbe.ResetAll();
                 Patches.WorldSyncDiagnosticCore.ResetAll();
@@ -2163,6 +2170,23 @@ namespace SteamP2PFriends
                     $"prefixOwner={Patches.ObjectManagerRegionSyncPatch.PrefixOwnerSummary}");
             }
 
+            bool levelObjectCollisionOk = Patches.LevelObjectRemoteCollisionPatch.AllRegistrationsSucceeded;
+            if (!levelObjectCollisionOk)
+            {
+                RoleLogger.Error("[Shared]",
+                    $"[Diag] !!! DIAGNOSTIC BUILD INVALID: LevelObjectRemoteCollisionPatch " +
+                    $"summary={Patches.LevelObjectRemoteCollisionPatch.RegistrationSummary} " +
+                    $"rootPostfix={Patches.LevelObjectRemoteCollisionPatch.RootActivationPostfixRegistered} " +
+                    $"regionTrackerPostfix={Patches.LevelObjectRemoteCollisionPatch.RegionTrackerPostfixRegistered}");
+                allOk = false;
+            }
+            else
+            {
+                RoleLogger.Info("[Shared]",
+                    $"[Diag] OK LevelObjectRemoteCollisionPatch: " +
+                    $"summary={Patches.LevelObjectRemoteCollisionPatch.RegistrationSummary}");
+            }
+
             //   - UseableBarricadeDiagnosticPatch：8 DP（startPrimary/check/checkSpace/checkClaims/ReceiveBarricadeNone/simulate/build/dropBarricade）
             //   - ZombieEntityMappingDiagnosticPatch：7 DP（SendZombies/ReceiveZombies/SendZombieStates/ReceiveZombieStates/onBoundUpdated/sendZombieDead+Alive/ReceiveZombieDead+Alive）
             //   - PlayerManagerCullingDiagnosticPatch：3 DP（SendPlayerStates_Write Prefix/ReceivePlayerStates Postfix/tellState Prefix）
@@ -3326,6 +3350,17 @@ namespace SteamP2PFriends
             catch (System.Exception ex)
             {
                 RoleLogger.Error("[Shared]", $"ObjectManagerRegionSyncPatch.RegisterManual 失败: {ex}");
+            }
+
+            //   listen host is a graphical client, so vanilla only keeps static object collision around the host.
+            //   Add remote guests' regional collision coverage while leaving renderer visibility host-local.
+            try
+            {
+                Patches.LevelObjectRemoteCollisionPatch.RegisterManual(_harmony);
+            }
+            catch (System.Exception ex)
+            {
+                RoleLogger.Error("[Shared]", $"LevelObjectRemoteCollisionPatch.RegisterManual 失败: {ex}");
             }
 
             RoleLogger.Info("[Shared]", "[Diag] === 手动登记完成 ===");

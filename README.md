@@ -3,7 +3,7 @@
 > 为 Unturned 提供无 U3DS 的便捷 listen-host 联机，同时支持 SteamID P2P 和 IPv4 直连。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
-[![Version](https://img.shields.io/badge/version-0.2.3.62--beta.2-blue.svg)](https://github.com/YU80Rice/SteamP2PFriends/releases)
+[![Version](https://img.shields.io/badge/version-0.2.3.63--beta.2-blue.svg)](https://github.com/YU80Rice/SteamP2PFriends/releases)
 [![Status](https://img.shields.io/badge/status-Beta%20Prerelease-orange.svg)](https://github.com/YU80Rice/SteamP2PFriends/releases)
 
 ## 项目简介
@@ -65,7 +65,7 @@ Unturned/
 
 ### 连接日志
 
-`v0.2.3.62-beta.2` 默认输出低频 `[P2P-Connection]` 事件。发生失败时，房主和客机日志会记录连接调用、客户端状态变化、`Verify`、`Authenticate`、接受/拒绝和断开阶段；不记录认证票据。`VerboseDiagnostics` 与 `RouteDiagnostics` 仍默认关闭，只用于额外诊断，不是该连接事件日志的前提。
+`v0.2.3.63-beta.2` 默认输出低频 `[P2P-Connection]` 事件。发生失败时，房主和客机日志会记录连接调用、客户端状态变化、`Verify`、`Authenticate`、接受/拒绝和断开阶段；不记录认证票据。`VerboseDiagnostics` 与 `RouteDiagnostics` 仍默认关闭，只用于额外诊断，不是该连接事件日志的前提。
 
 ### 客机通过 IPv4 加入
 
@@ -98,14 +98,14 @@ Windows 防火墙必须允许 Unturned 在相应网络上使用 UDP `27016`。
 
 | 项目 | 值 |
 |---|---|
-| BepInPlugin | `0.2.3.62` |
-| AssemblyVersion | `0.2.3.62` |
-| AssemblyFileVersion | `0.2.3.62` |
-| 当前构建 SHA-256 | `0198DBC963ACF0DC769136E737D265D38D0CF2665C53A0A652DA20F949681777` |
+| BepInPlugin | `0.2.3.63` |
+| AssemblyVersion | `0.2.3.63` |
+| AssemblyFileVersion | `0.2.3.63` |
+| 当前构建 SHA-256 | `B89D6039E033EDE2FE566D3CA2C033153CFF2B27BA14CEAEF626490C3CF05042` |
 | 静态状态 | 当前 Unturned/BepInEx ABI 零警告构建；自动化测试 `269/269 PASS` |
-| 当前手动测试归档 | `Beta2-P2P-AHost-20260818-1300`：`AllOK=true`，仅覆盖 `0.2.3.61` |
-| 发布标识 | `v0.2.3.62-beta.2` |
-| 发布状态 | Beta 2 连接取证构建，待新 DLL 双机运行时验证 |
+| 当前手动测试归档 | `UMM-诊断包_20260820_172007` / `UMM-诊断包_20260820_172032`：普通静态 `LevelObject` 远区碰撞通过 |
+| 发布标识 | `v0.2.3.63-beta.2` |
+| 发布状态 | Beta 2：已验证普通家具、柜子、沙发等静态场景物件的远区碰撞；树木、资源、动物和载具仍待专项验证 |
 
 ## 已验证边界与免责声明
 
@@ -117,10 +117,13 @@ Windows 防火墙必须允许 Unturned 在相应网络上使用 UDP `27016`。
 - PVP、难度、死亡保留和作弊权限投影。
 - 缺失创意工坊地图/物品的原版下载流程。
 - 地面自然刷新物品的房主权威同步。
+- 普通静态场景物件（例如家具、柜子、沙发）的远区碰撞：房主离开客机所在区域后，客机仍受房主权威碰撞约束。
 
 已验证边界与免责声明：
 
 - 当前版本的双端手动测试归档为 `Beta2-P2P-AHost-20260818-1300`，双方使用同一 DLL，归档摘要为 `AllOK=true`。部署与日志归档由测试人员手动控制；`TestLogs` 中的 CFG 哈希工具仅作可选辅助记录，不构成额外发布门。
+- 家具远区碰撞验收使用 `UMM-诊断包_20260820_172007`（客机）和 `UMM-诊断包_20260820_172032`（房主）。测试时房主部署的碰撞候选 DLL SHA-256 为 `2FC58A382E9B7E86ED2EC202001CD6A7574509FB55394CAF5459007B53EBABFC`；客机归档记录版本 `0.2.3.62`，但未保存可独立核验的 DLL 哈希。`v0.2.3.63-beta.2` 仅在该已验证逻辑上更新程序集版本和发布文档，正式发布 DLL 的哈希为上表值，尚未取得该新哈希的双端归档。
+- 树木、灌木、可采集资源、动物、载具，以及物件/路障/建筑的完整远区交互与存档，均不在本次碰撞修复的验收范围内。
 - SakuraFRP/公网穿透的最终可用性受第三方节点、NAT、运营商和防火墙影响；测试通过不构成网络可达性保证。
 - Steam 付费外观、第三方内容和未安装资源的表现取决于双方本地资源与原版下载机制，不构成插件对第三方资产的担保。
 - 不承诺与任意第三方 BepInEx/Harmony/原生注入工具共存。启动后可从 `BepInEx/config/SteamP2PFriends/p2p-harmony-compatibility.json` 获取 Harmony 冲突清单；连接、认证与 transport 关键目标上的冲突会在创建或加入 P2P 会话前阻断。
