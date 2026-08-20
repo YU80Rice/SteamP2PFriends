@@ -43,7 +43,7 @@ Final DLL:
 
 The collision behavior was exercised in paired UMM archives `UMM-诊断包_20260820_172007` (client) and `UMM-诊断包_20260820_172032` (host): the client remained in Alberton while the host moved to Airport, and the client could no longer pass through the tested furniture. The host log records successful registration, `remotePlayers=1 activeRegions=49`, twelve root reactivations, and coverage removal on disconnect.
 
-That capture used the pre-versioning collision candidate SHA-256 `2FC58A382E9B7E86ED2EC202001CD6A7574509FB55394CAF5459007B53EBABFC`. `v0.2.3.63-beta.2` changes only assembly/plugin version metadata and release documentation on top of the verified collision code; its final SHA-256 has not yet received a fresh paired archive. The GitHub release must retain this distinction.
+That capture used the pre-versioning collision candidate SHA-256 `2FC58A382E9B7E86ED2EC202001CD6A7574509FB55394CAF5459007B53EBABFC`. `v0.2.3.63-beta.2` changes only assembly/plugin version metadata and release documentation on top of the verified collision code. The developer has declared that the release DLL was manually installed on the test endpoints and has accepted final SHA-256 `B89D6039E033EDE2FE566D3CA2C033153CFF2B27BA14CEAEF626490C3CF05042` as the deployment-identity archive in place of a new automatic paired hash snapshot. This attests deployment provenance only; it does not expand the runtime acceptance scope.
 
 ## 5. Independent audit gate
 
