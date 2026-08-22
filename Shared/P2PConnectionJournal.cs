@@ -77,6 +77,34 @@ namespace SteamP2PFriends.Shared
             }
         }
 
+        internal static void HostAuthenticateState(ITransportConnection transportConnection, string phase)
+        {
+            try
+            {
+                SteamPending pending = Provider.findPendingPlayer(transportConnection);
+                SteamPlayerID playerId = ReferenceEquals(pending, null) ? null : pending.playerID;
+                ulong remoteSteamId = ReferenceEquals(playerId, null) ? 0UL : playerId.steamID.m_SteamID;
+                Write("[Host]", "HOST_AUTHENTICATE_STATE",
+                    "phase=" + SafeText(phase) + " remoteSteamId=" + remoteSteamId +
+                    " pendingFound=" + (!ReferenceEquals(pending, null)) +
+                    " hasAuthentication=" + (!ReferenceEquals(pending, null) && pending.hasAuthentication) +
+                    " hasProof=" + (!ReferenceEquals(pending, null) && pending.hasProof) +
+                    " hasGroup=" + (!ReferenceEquals(pending, null) && pending.hasGroup) +
+                    " canAcceptYet=" + (!ReferenceEquals(pending, null) && pending.canAcceptYet));
+            }
+            catch (Exception exception)
+            {
+                Write("[Host]", "HOST_AUTHENTICATE_STATE_OBSERVER_FAILED",
+                    "phase=" + SafeText(phase) + " exceptionType=" + ExceptionType(exception));
+            }
+        }
+
+        internal static void ClientEconomyProofBypassed()
+        {
+            Write("[Client]", "CLIENT_ECONOMY_PROOF_EMPTY",
+                "scope=plugin-p2p-handshake reason=listen-host-offline-auth-compatibility");
+        }
+
         internal static void HostAuthenticateHandlerReturned(ITransportConnection transportConnection)
         {
             Write("[Host]", "HOST_AUTHENTICATE_HANDLER_RETURNED",

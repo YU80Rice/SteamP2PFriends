@@ -547,7 +547,7 @@ namespace SteamP2PFriends.Host
             }
 
             // Quarantined players must not die; if abnormal, record diagnostic and do not broadcast.
-            if (P2PQuarantineAdmissionService.IsActive(victimId))
+            if (P2PApprovalManager.IsPending(victimId))
             {
                 RoleLogger.Warn("[Host]",
                     "[WorldBroadcast] quarantined player death ignored (fail-closed) cause=" + cause);
@@ -861,7 +861,7 @@ namespace SteamP2PFriends.Host
             SendWorldMessage(text, "connect", kind.ToString());
         }
 
-        /// <summary>Approval transaction committed fully (指令 B). Called from P2PJoinApprovalService.Approve.</summary>
+        /// <summary>Approval transaction committed fully. Called from P2PApprovalManager.ApprovePlayer.</summary>
         internal static void OnPlayerApproved(CSteamID steamId)
         {
             try

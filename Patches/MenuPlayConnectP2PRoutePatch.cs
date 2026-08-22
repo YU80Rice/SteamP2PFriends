@@ -33,9 +33,9 @@ namespace SteamP2PFriends.Patches
             // Priority 1: individual SteamID -> P2P (unaffected by the DNS toggle).
             if (route == UnifiedJoinAddressKind.SteamP2P)
             {
-                if (!SteamP2PFriendsPlugin.DiagnosticBuildValid)
+                if (!SteamP2PFriendsPlugin.IsP2PEntryReady)
                 {
-                    ShowAlertBestEffort("SteamP2PFriends 自检未通过，Steam P2P 连接已禁用。");
+                    ShowAlertBestEffort("SteamP2PFriends 尚未完成联机初始化，Steam P2P 连接已禁用。");
                     return false;
                 }
 

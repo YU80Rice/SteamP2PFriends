@@ -13,6 +13,7 @@ namespace SteamP2PFriends.Client
         private static ISleekBox _root;
         private static ISleekLabel _countdown;
         private static float _observedAt;
+        private static Player _observedPlayer;
         private static bool _wasActive;
         private static int _nextChatAnnouncement = 25;
         internal static Action<string> _testChatSink;
@@ -25,7 +26,7 @@ namespace SteamP2PFriends.Client
                 Player local = Player.LocalPlayer;
                 if (local == null) return false;
                 uint flags = unchecked((uint)(int)local.pluginWidgetFlags);
-                return (flags & P2PQuarantineAdmissionService.QuarantineSignalMask) != 0u;
+                return (flags & P2PApprovalManager.QuarantineSignalMask) != 0u;
             }
         }
 
@@ -35,25 +36,33 @@ namespace SteamP2PFriends.Client
             bool active = IsLocalPlayerQuarantined;
             if (!active)
             {
-                if (_wasActive || _root != null) Destroy();
+                if (_wasActive)
+                {
+                    Destroy();
+                }
+                else if (_root != null) Destroy();
                 _wasActive = false;
                 return;
             }
 
-            if (!_wasActive)
+            Player localPlayer = Player.LocalPlayer;
+            // The UI tick is intentionally skipped while the client is returning to the menu.
+            // A new local Player instance therefore forms the reliable session boundary for the
+            // countdown, even when the previous session's widget flag has not replicated clear.
+            if (!_wasActive || !ReferenceEquals(_observedPlayer, localPlayer))
             {
                 _observedAt = Time.realtimeSinceStartup;
+                _observedPlayer = localPlayer;
                 _wasActive = true;
                 _nextChatAnnouncement = 25;
             }
 
             EnsureCreated();
             int remaining = Math.Max(0, (int)Math.Ceiling(
-                P2PQuarantineAdmissionService.ActiveLifetimeSeconds -
+                P2PApprovalManager.ApprovalLifetimeSeconds -
                 (Time.realtimeSinceStartup - _observedAt)));
             if (_countdown != null) _countdown.Text = "剩余等待时间：" + remaining + " 秒";
-            // Chat countdown is server-authoritative and targeted to this player. The widget flag
-            // remains presentation-only so a missed/late UI signal cannot suppress chat messages.
+            // The on-screen countdown is the sole presentation; no chat spam is emitted.
         }
 
         internal static void Destroy()
@@ -66,6 +75,7 @@ namespace SteamP2PFriends.Client
             _root = null;
             _countdown = null;
             _observedAt = 0f;
+            _observedPlayer = null;
             _nextChatAnnouncement = 25;
         }
 

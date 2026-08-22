@@ -56,12 +56,52 @@ namespace SteamP2PFriends.Host
     {
         public void Load() => SteamWhitelist.load();
         public void Save() => SteamWhitelist.save();
-        public bool Contains(CSteamID steamId) => SteamWhitelist.checkWhitelisted(steamId);
+        /// <summary>
+        /// Returns physical membership from the native list, rather than calling
+        /// SteamWhitelist.checkWhitelisted. Route B patches that method only for the
+        /// handshake pipeline, so it must never decide persistence or quarantine.
+        /// </summary>
+        public bool Contains(CSteamID steamId)
+        {
+            List<SteamWhitelistID> list = SteamWhitelist.list;
+            if (list == null) throw new InvalidOperationException("SteamWhitelist.list is null");
+            return ContainsRaw(list, steamId);
+        }
+
+        internal static bool ContainsRawForTest(List<SteamWhitelistID> list, CSteamID steamId)
+        {
+            return ContainsRaw(list, steamId);
+        }
+
+        private static bool ContainsRaw(List<SteamWhitelistID> list, CSteamID steamId)
+        {
+            if (list == null) throw new ArgumentNullException(nameof(list));
+            for (int index = 0; index < list.Count; index++)
+            {
+                if (list[index].steamID == steamId) return true;
+            }
+            return false;
+        }
 
         public void AddOrUpdate(CSteamID steamId, string tag, CSteamID judgeId) =>
             SteamWhitelist.whitelist(steamId, tag, judgeId);
 
-        public bool Remove(CSteamID steamId) => SteamWhitelist.unwhitelist(steamId);
+        /// <summary>
+        /// Removes only the in-memory whitelist entry. Do not call SteamWhitelist.unwhitelist:
+        /// that vanilla helper kicks the guest before this service can prove Save/Load succeeded.
+        /// </summary>
+        public bool Remove(CSteamID steamId)
+        {
+            List<SteamWhitelistID> list = SteamWhitelist.list;
+            if (list == null) throw new InvalidOperationException("SteamWhitelist.list is null");
+            for (int index = 0; index < list.Count; index++)
+            {
+                if (list[index].steamID != steamId) continue;
+                list.RemoveAt(index);
+                return true;
+            }
+            return false;
+        }
 
         // 零处访问 private SteamWhitelist._list
         public List<SteamWhitelistID> Snapshot() => SteamWhitelist.list
@@ -437,6 +477,74 @@ namespace SteamP2PFriends.Host
         }
 
         /// <summary>
+        /// Route B revoke transaction. It has the same Snapshot -> Remove -> Save -> Load ->
+        /// !Contains proof as TryRemove, but never disconnects any player on persistence failure.
+        /// P2PApprovalManager issues the one targeted kick only after this method returns true.
+        /// </summary>
+        internal static bool TryRemoveForApprovalRevoke(CSteamID target, out string feedback)
+        {
+            _runtime.AssertGameThread();
+            feedback = "";
+            if (!CanManage())
+            {
+                feedback = "当前不是活动 P2P 房主或故障锁存中";
+                return false;
+            }
+            if (target == CSteamID.Nil || !target.IsValid())
+            {
+                feedback = "SteamID 无效";
+                return false;
+            }
+            CSteamID localUser = _runtime.LocalUser;
+            if (localUser == CSteamID.Nil || !localUser.IsValid() || target == localUser)
+            {
+                feedback = "不能移除房主自身";
+                return false;
+            }
+
+            lock (WhitelistSync)
+            {
+                if (!CanManage())
+                {
+                    feedback = "锁内二次校验失败";
+                    return false;
+                }
+
+                List<SteamWhitelistID> snapshot = null;
+                try
+                {
+                    snapshot = _store.Snapshot();
+                    if (!_store.Remove(target))
+                    {
+                        feedback = "条目已不在白名单中";
+                        return false;
+                    }
+                    _store.Save();
+                    _store.Load();
+                    if (_store.Contains(target))
+                        throw new InvalidOperationException("postcondition Contains(target)==true after Remove");
+                }
+                catch (Exception ex)
+                {
+                    if (snapshot != null)
+                    {
+                        try { _store.Restore(snapshot); }
+                        catch (Exception restoreEx) { SafeLogRestoreFailure("ApprovalRevoke", restoreEx); }
+                    }
+                    _persistenceFaulted = true;
+                    RecordWhitelistFailure("ApprovalRevoke", target, ex);
+                    feedback = "移除失败，客户端保持连接：" + ex.GetType().Name;
+                    RoleLogger.Error("[Host]", "[P2P-WL] approval revoke persistence failed; no guest kick: " + ex.GetType().Name);
+                    return false;
+                }
+            }
+
+            feedback = "移除成功";
+            RoleLogger.Info("[Host]", "[P2P-WL] approval revoke committed: target=" + target.m_SteamID);
+            return true;
+        }
+
+        /// <summary>
         /// UI 列表快照：仅在 CanManage() 时返回深拷贝；否则返回空只读列表（蓝图 §2.1）。
         /// </summary>
         internal static IReadOnlyList<SteamWhitelistID> SnapshotForUi()
@@ -457,6 +565,10 @@ namespace SteamP2PFriends.Host
             }
         }
 
+        /// <summary>
+        /// Physical whitelist membership for the world-entry state machine and P-key UI.
+        /// This deliberately bypasses the Route B handshake permit postfix.
+        /// </summary>
         internal static bool ContainsForUi(CSteamID target)
         {
             _runtime.AssertGameThread();

@@ -77,11 +77,12 @@ namespace SteamP2PFriends.Patches
         }
 
         internal static bool ShouldBlock(bool isP2PHostMode, bool isServer, bool isLocalHost,
-            bool hasCheats, bool isAdmin, string command)
+            bool isPending, bool hasCheats, bool isAdmin, string command)
         {
             if (!isP2PHostMode || !isServer || isLocalHost || String.IsNullOrEmpty(command)) return false;
             char first = command[0];
             if (first != '/' && first != '@') return false;
+            if (isPending) return true;
             return !hasCheats || !isAdmin;
         }
 
@@ -91,8 +92,9 @@ namespace SteamP2PFriends.Patches
             if (ReferenceEquals(player, null) || ReferenceEquals(player.playerID, null)) return true;
 
             bool isLocalHost = player.playerID.steamID == Provider.user;
+            bool isPending = P2PApprovalManager.IsPending(player.playerID.steamID);
             if (!ShouldBlock(HostManager.IsP2PHostMode, Provider.isServer, isLocalHost,
-                    Provider.hasCheats, player.isAdmin, cmd))
+                    isPending, Provider.hasCheats, player.isAdmin, cmd))
                 return true;
 
             __result = false;

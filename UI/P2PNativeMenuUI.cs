@@ -51,6 +51,7 @@ namespace SteamP2PFriends.UI
 
         // v3 测试 hook
         internal static bool _testBypassThreadAssert;
+        internal static bool _testBypassGlazier;
         internal static Func<ISleekElement> _testParentProvider;
         internal static bool IsCreatedForTest => _created;
         internal static ISleekElement BoundParentForTest => _boundParent;
@@ -93,9 +94,7 @@ namespace SteamP2PFriends.UI
             ISleekElement current = _testParentProvider?.Invoke() ?? MenuUI.container;
             if (current == null)
             {
-                // 容器已撤销时，旧视图不可再作为“可见且可取消”的依据。
-                // 等待控制器会在同帧看到 EnsureApprovalWaitVisible=false 并 fail-closed 停止重试。
-                if (_created || _waitBox != null)
+                if (_created)
                 {
                     Destroy();
                 }
@@ -138,8 +137,6 @@ namespace SteamP2PFriends.UI
             {
                 ThreadUtil.assertIsGameThread();
             }
-
-            DetachApprovalWaitView();
 
             if (_boundParent != null)
             {
@@ -643,7 +640,7 @@ namespace SteamP2PFriends.UI
         {
             try
             {
-                if (!SteamP2PFriendsPlugin.DiagnosticBuildValid)
+                if (!SteamP2PFriendsPlugin.IsP2PEntryReady)
                 {
                     MenuUI.alert("SteamP2PFriends 自检未通过，多人联机功能不可用。请查看日志。");
                     return;
@@ -744,7 +741,7 @@ namespace SteamP2PFriends.UI
         {
             try
             {
-                if (!SteamP2PFriendsPlugin.DiagnosticBuildValid)
+                if (!SteamP2PFriendsPlugin.IsP2PEntryReady)
                 {
                     SetJoinError("SteamP2PFriends 自检未通过，客机连接被拒绝。请查看日志。");
                     return;
@@ -855,139 +852,6 @@ namespace SteamP2PFriends.UI
             catch
             {
             }
-        }
-
-
-        private static ISleekElement _waitBoundParent;
-        private static ISleekBox _waitBox;
-        private static ISleekLabel _waitLabel;
-        private static ISleekButton _waitCancelButton;
-        private static System.Action _waitCancelCallback;
-        internal static bool _testBypassGlazier;
-        private static bool _waitVisible;
-        private static int _waitSecondsRemaining;
-        internal static bool IsWaitVisibleForTest => _waitVisible;
-        internal static int WaitSecondsRemainingForTest => _waitSecondsRemaining;
-        internal static ISleekElement WaitBoundParentForTest => _waitBoundParent;
-
-        // 仅销毁视图；绝不修改 P2PApprovalWaitController 的预算或连接状态
-        private static void DetachApprovalWaitView()
-        {
-            if (_waitBoundParent != null && _waitBox != null)
-                TryRemoveChild(_waitBoundParent, _waitBox);
-            _waitBoundParent = null;
-            _waitBox = null;
-            _waitLabel = null;
-            _waitCancelButton = null;
-            _waitVisible = false;
-        }
-
-        /// <summary>
-        /// parent 变更 -> 先 Detach 旧视图，再在新 parent 上重建。返回 false = 不可见/不可取消。
-        /// </summary>
-        internal static bool EnsureApprovalWaitVisible(ulong hostSteamId, int seconds, System.Action cancel)
-        {
-            if (!_testBypassThreadAssert) ThreadUtil.assertIsGameThread();
-            if (!P2PClientUiEnvironment.CanTouchClientUi()) return false;
-
-            EnsureCreated();
-            if (!_created || _boundParent == null) return false;
-
-            // 已绑定同一 parent -> 仅更新倒计时
-            if (_waitBox != null && ReferenceEquals(_waitBoundParent, _boundParent))
-            {
-                _waitCancelCallback = cancel;
-                UpdateApprovalWait(seconds);
-                return true;
-            }
-
-            // parent 变更或首次 -> Detach 旧视图 + 重建
-            DetachApprovalWaitView();
-            _waitCancelCallback = cancel;
-            _waitVisible = true;
-            _waitSecondsRemaining = seconds;
-
-            if (_testBypassGlazier)
-            {
-                _waitBoundParent = _boundParent;
-                return true;
-            }
-
-            try
-            {
-                _waitBoundParent = _boundParent;
-                _waitBox = Glazier.Get().CreateBox();
-                _waitBox.PositionScale_X = 0.5f;
-                _waitBox.PositionScale_Y = 0.5f;
-                _waitBox.PositionOffset_X = -150;
-                _waitBox.PositionOffset_Y = -80;
-                _waitBox.SizeOffset_X = 300;
-                _waitBox.SizeOffset_Y = 160;
-                _waitBox.IsVisible = true;
-
-                ISleekLabel title = Glazier.Get().CreateLabel();
-                title.PositionOffset_X = 10; title.PositionOffset_Y = 10;
-                title.SizeOffset_X = 280; title.SizeOffset_Y = 24;
-                title.FontSize = ESleekFontSize.Medium;
-                title.Text = "等待房主审批";
-                _waitBox.AddChild(title);
-
-                _waitLabel = Glazier.Get().CreateLabel();
-                _waitLabel.PositionOffset_X = 10; _waitLabel.PositionOffset_Y = 44;
-                _waitLabel.SizeOffset_X = 280; _waitLabel.SizeOffset_Y = 24;
-                _waitLabel.FontSize = ESleekFontSize.Small;
-                _waitLabel.Text = "距下次尝试：" + seconds + "秒";
-                _waitBox.AddChild(_waitLabel);
-
-                ISleekLabel hint = Glazier.Get().CreateLabel();
-                hint.PositionOffset_X = 10; hint.PositionOffset_Y = 72;
-                hint.SizeOffset_X = 280; hint.SizeOffset_Y = 36;
-                hint.FontSize = ESleekFontSize.Small;
-                hint.Text = "服务器已拒绝本次连接；房主批准后将自动重试。";
-                _waitBox.AddChild(hint);
-
-                _waitCancelButton = Glazier.Get().CreateButton();
-                _waitCancelButton.PositionOffset_X = 75; _waitCancelButton.PositionOffset_Y = 115;
-                _waitCancelButton.SizeOffset_X = 150; _waitCancelButton.SizeOffset_Y = 30;
-                _waitCancelButton.FontSize = ESleekFontSize.Small;
-                _waitCancelButton.Text = "取消";
-                _waitCancelButton.OnClicked += OnWaitCancelClicked;
-                _waitBox.AddChild(_waitCancelButton);
-
-                _waitBoundParent.AddChild(_waitBox);
-                return true;
-            }
-            catch (Exception ex)
-            {
-                RoleLogger.Warn("[Client]", "[P2P-Wait] view build failed: " + ex.GetType().Name);
-                DetachApprovalWaitView();
-                _waitVisible = false;
-                return false;
-            }
-        }
-
-        internal static void UpdateApprovalWait(int secondsRemaining)
-        {
-            if (!_testBypassThreadAssert) ThreadUtil.assertIsGameThread();
-            _waitSecondsRemaining = secondsRemaining;
-            if (_testBypassGlazier) return;
-            try { if (_waitLabel != null) _waitLabel.Text = "距下次尝试：" + secondsRemaining + "秒"; }
-            catch { }
-        }
-
-        /// <summary>v3：通过 _waitBoundParent 移除视图（即使 _boundParent 已改变）。</summary>
-        internal static void HideApprovalWait()
-        {
-            if (!_testBypassThreadAssert) ThreadUtil.assertIsGameThread();
-            _waitVisible = false;
-            _waitSecondsRemaining = 0;
-            _waitCancelCallback = null;
-            DetachApprovalWaitView();
-        }
-
-        private static void OnWaitCancelClicked(ISleekElement button)
-        {
-            try { _waitCancelCallback?.Invoke(); } catch { }
         }
     }
 }

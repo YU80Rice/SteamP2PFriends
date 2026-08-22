@@ -23,13 +23,17 @@ namespace SteamP2PFriends.Patches
         private static readonly HashSet<int> RemoteCoverage = new HashSet<int>();
         private static readonly HashSet<int> NextRemoteCoverage = new HashSet<int>();
         private static readonly HashSet<int> ChangedCoverage = new HashSet<int>();
+        private static readonly Dictionary<UnityEngine.Animation, UnityEngine.AnimationCullingType> RemoteAnimationCulling =
+            new Dictionary<UnityEngine.Animation, UnityEngine.AnimationCullingType>();
 
         private static Action<LevelObject> _refreshActiveState;
         private static bool _registrationAttempted;
         private static bool _reconcileFaultLogged;
         private static bool _rootActivationFaultLogged;
+        private static bool _animationPolicyFaultLogged;
         private static int _coverageLogCount;
         private static int _rootActivationLogCount;
+        private static int _animationPolicyLogCount;
 
         public static bool AllRegistrationsSucceeded { get; private set; }
         public static bool RootActivationPostfixRegistered { get; private set; }
@@ -78,7 +82,7 @@ namespace SteamP2PFriends.Patches
                 RootActivationPostfixRegistered = HasExactOwnPostfix(updateActive, rootActivationPostfix);
                 RegionTrackerPostfixRegistered = HasExactOwnPostfix(levelObjectsUpdate, regionTrackerPostfix);
                 AllRegistrationsSucceeded = RootActivationPostfixRegistered && RegionTrackerPostfixRegistered;
-                RegistrationSummary = "strategy=postfix-root-reactivation, rootPostfixOwner=" +
+                RegistrationSummary = "strategy=postfix-root-reactivation+dynamic-animation, rootPostfixOwner=" +
                     RootActivationPostfixRegistered + ", updatePostfixOwner=" + RegionTrackerPostfixRegistered;
 
                 if (AllRegistrationsSucceeded)
@@ -111,12 +115,16 @@ namespace SteamP2PFriends.Patches
             {
                 if (!IsRemoteCollisionCoverageRequired(__instance) || !__instance.canDamageRubble)
                 {
+                    RestoreRemoteAnimationPolicy(__instance);
                     return;
                 }
 
                 ObjectAsset asset = __instance.asset;
                 if (asset != null && asset.type == EObjectType.NPC)
+                {
+                    RestoreRemoteAnimationPolicy(__instance);
                     return;
+                }
 
                 UnityEngine.Transform transform = __instance.transform;
                 if (ReferenceEquals(transform, null))
@@ -126,24 +134,35 @@ namespace SteamP2PFriends.Patches
                 // semantics. They must remain entirely under vanilla visibility control.
                 UnityEngine.Transform decalTransform = transform.Find("Decal");
                 if (!ReferenceEquals(decalTransform, null))
+                {
+                    RestoreRemoteAnimationPolicy(__instance);
                     return;
+                }
 
                 UnityEngine.GameObject gameObject = transform.gameObject;
-                if (ReferenceEquals(gameObject, null) || gameObject.activeSelf)
+                if (ReferenceEquals(gameObject, null))
                     return;
 
                 // Requiring a collider also excludes marker-only assets whose root activation and renderer
                 // visibility must remain under vanilla control.
                 UnityEngine.Collider collider = transform.GetComponentInChildren<UnityEngine.Collider>(true);
                 if (ReferenceEquals(collider, null))
-                    return;
-
-                gameObject.SetActive(true);
-                if (_rootActivationLogCount < CoverageLogLimit)
                 {
-                    _rootActivationLogCount++;
-                    RoleLogger.Info("[Host]", "[LevelObjectCollision] root reactivated #" + _rootActivationLogCount +
-                        "/" + CoverageLogLimit + " collider=" + collider.GetType().Name);
+                    RestoreRemoteAnimationPolicy(__instance);
+                    return;
+                }
+
+                ApplyRemoteAnimationPolicy(__instance, transform);
+
+                if (!gameObject.activeSelf)
+                {
+                    gameObject.SetActive(true);
+                    if (_rootActivationLogCount < CoverageLogLimit)
+                    {
+                        _rootActivationLogCount++;
+                        RoleLogger.Info("[Host]", "[LevelObjectCollision] root reactivated #" + _rootActivationLogCount +
+                            "/" + CoverageLogLimit + " collider=" + collider.GetType().Name);
+                    }
                 }
             }
             catch (Exception ex)
@@ -231,13 +250,147 @@ namespace SteamP2PFriends.Patches
             RemotePlayerRegions.Clear();
             NextRemotePlayerRegions.Clear();
             RebuildCoverageAndRefresh("session-reset");
+            RestoreAllRemoteAnimationPolicies();
 
             _coverageLogCount = 0;
             _reconcileFaultLogged = false;
             _rootActivationFaultLogged = false;
+            _animationPolicyFaultLogged = false;
             _rootActivationLogCount = 0;
+            _animationPolicyLogCount = 0;
             RoleLogger.Info("[Shared]", "[LevelObjectCollision] ResetAll remotePlayers=" + playerCount +
                 " collisionRegions=" + regionCount);
+        }
+
+        private static void ApplyRemoteAnimationPolicy(LevelObject levelObject, UnityEngine.Transform transform)
+        {
+            if (!(levelObject.interactable is InteractableObjectBinaryState))
+            {
+                RestoreRemoteAnimationPolicy(levelObject);
+                return;
+            }
+
+            try
+            {
+                UnityEngine.Animation[] animations = transform.GetComponentsInChildren<UnityEngine.Animation>(true);
+                int changed = 0;
+                for (int index = 0; index < animations.Length; index++)
+                {
+                    UnityEngine.Animation animation = animations[index];
+                    if (animation == null)
+                        continue;
+
+                    if (!RemoteAnimationCulling.ContainsKey(animation))
+                    {
+                        RemoteAnimationCulling.Add(animation, animation.cullingType);
+                    }
+
+                    if (animation.cullingType != UnityEngine.AnimationCullingType.AlwaysAnimate)
+                    {
+                        animation.cullingType = UnityEngine.AnimationCullingType.AlwaysAnimate;
+                        changed++;
+                    }
+                }
+
+                if (changed > 0 && _animationPolicyLogCount < CoverageLogLimit)
+                {
+                    _animationPolicyLogCount++;
+                    RoleLogger.Info("[Host]", "[LevelObjectCollision] dynamic animation preserved #" +
+                        _animationPolicyLogCount + "/" + CoverageLogLimit + " changed=" + changed +
+                        " tracked=" + RemoteAnimationCulling.Count);
+                }
+            }
+            catch (Exception ex)
+            {
+                LogAnimationPolicyFault("apply", ex);
+            }
+        }
+
+        private static void RestoreRemoteAnimationPolicy(LevelObject levelObject)
+        {
+            if (RemoteAnimationCulling.Count == 0 || ReferenceEquals(levelObject, null))
+                return;
+
+            try
+            {
+                UnityEngine.Transform transform = levelObject.transform;
+                if (transform == null)
+                    return;
+
+                UnityEngine.Animation[] animations = transform.GetComponentsInChildren<UnityEngine.Animation>(true);
+                for (int index = 0; index < animations.Length; index++)
+                {
+                    UnityEngine.Animation animation = animations[index];
+                    if (animation == null)
+                        continue;
+
+                    UnityEngine.AnimationCullingType original;
+                    if (!RemoteAnimationCulling.TryGetValue(animation, out original))
+                        continue;
+
+                    try
+                    {
+                        animation.cullingType = original;
+                        RemoteAnimationCulling.Remove(animation);
+                    }
+                    catch (Exception ex)
+                    {
+                        LogAnimationPolicyFault("restore-object", ex);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                LogAnimationPolicyFault("restore-object", ex);
+            }
+        }
+
+        private static void RestoreAllRemoteAnimationPolicies()
+        {
+            if (RemoteAnimationCulling.Count == 0)
+                return;
+
+            try
+            {
+                var animations = new List<UnityEngine.Animation>(RemoteAnimationCulling.Keys);
+                for (int index = 0; index < animations.Count; index++)
+                {
+                    UnityEngine.Animation animation = animations[index];
+                    if (animation == null)
+                        continue;
+
+                    UnityEngine.AnimationCullingType original;
+                    if (RemoteAnimationCulling.TryGetValue(animation, out original))
+                    {
+                        try
+                        {
+                            animation.cullingType = original;
+                        }
+                        catch (Exception ex)
+                        {
+                            LogAnimationPolicyFault("restore-all-item", ex);
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                LogAnimationPolicyFault("restore-all", ex);
+            }
+            finally
+            {
+                RemoteAnimationCulling.Clear();
+            }
+        }
+
+        private static void LogAnimationPolicyFault(string stage, Exception ex)
+        {
+            if (_animationPolicyFaultLogged)
+                return;
+
+            _animationPolicyFaultLogged = true;
+            RoleLogger.Warn("[Shared]", "[LevelObjectCollision] dynamic animation policy " + stage +
+                " skipped: " + ex.GetType().Name);
         }
 
         private static void ReconcileRemoteCoverage()

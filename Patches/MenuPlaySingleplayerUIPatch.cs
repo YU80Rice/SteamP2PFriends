@@ -17,17 +17,30 @@ namespace SteamP2PFriends.Patches
     {
         private const float MultiplayerButton_Y = 520f;
         private const float MultiplayerButton_Height = 30f;
+        private static ISleekElement _boundContainer;
+        private static ISleekButton _multiplayerButton;
 
         public static void Postfix()
         {
+            EnsureMultiplayerButton();
+        }
+
+        /// <summary>
+        /// May run from the menu constructor or from the Route B game-thread completion path.
+        /// It is idempotent for the current native menu container and removes stale instances
+        /// before rebinding after a menu rebuild.
+        /// </summary>
+        internal static void EnsureMultiplayerButton()
+        {
             try
             {
-                if (!SteamP2PFriendsPlugin.DiagnosticBuildValid)
+                if (!SteamP2PFriendsPlugin.IsP2PEntryReady)
                 {
-                    RoleLogger.Warn("[Shared]",
-                        "[P2P-UI] DiagnosticBuildValid=false，不注入多人联机按钮（P0-C4 INVALID 硬门控）");
+                    DestroyMultiplayerButton();
                     return;
                 }
+
+                ThreadUtil.assertIsGameThread();
 
                 FieldInfo containerFi = AccessTools.Field(typeof(MenuPlaySingleplayerUI), "container");
                 if (containerFi == null)
@@ -43,16 +56,21 @@ namespace SteamP2PFriends.Patches
                     return;
                 }
 
-                ISleekButton multiplayerButton = Glazier.Get().CreateButton();
-                multiplayerButton.PositionOffset_X = -305f;
-                multiplayerButton.PositionOffset_Y = MultiplayerButton_Y;
-                multiplayerButton.PositionScale_X = 0.5f;
-                multiplayerButton.SizeOffset_X = 200f;
-                multiplayerButton.SizeOffset_Y = MultiplayerButton_Height;
-                multiplayerButton.Text = "多人联机";
-                multiplayerButton.TooltipText = "打开 P2P 多人联机菜单：选择作为房主或客机";
-                multiplayerButton.OnClicked += OnClickedMultiplayerButton;
-                container.AddChild(multiplayerButton);
+                if (ReferenceEquals(_boundContainer, container) && _multiplayerButton != null)
+                    return;
+
+                DestroyMultiplayerButton();
+                _multiplayerButton = Glazier.Get().CreateButton();
+                _multiplayerButton.PositionOffset_X = -305f;
+                _multiplayerButton.PositionOffset_Y = MultiplayerButton_Y;
+                _multiplayerButton.PositionScale_X = 0.5f;
+                _multiplayerButton.SizeOffset_X = 200f;
+                _multiplayerButton.SizeOffset_Y = MultiplayerButton_Height;
+                _multiplayerButton.Text = "多人联机";
+                _multiplayerButton.TooltipText = "打开 P2P 多人联机菜单：选择作为房主或客机";
+                _multiplayerButton.OnClicked += OnClickedMultiplayerButton;
+                container.AddChild(_multiplayerButton);
+                _boundContainer = container;
 
                 RoleLogger.Info("[Shared]",
                     $"[P2P-UI] 多人联机按钮已注入 MenuPlaySingleplayerUI (Y={MultiplayerButton_Y})");
@@ -63,15 +81,26 @@ namespace SteamP2PFriends.Patches
             }
         }
 
+        internal static void DestroyMultiplayerButton()
+        {
+            if (_boundContainer != null && _multiplayerButton != null)
+            {
+                try { _boundContainer.RemoveChild(_multiplayerButton); }
+                catch (Exception ex) { RoleLogger.Warn("[Shared]", "[P2P-UI] 移除多人联机按钮失败: " + ex.GetType().Name); }
+            }
+            _multiplayerButton = null;
+            _boundContainer = null;
+        }
+
         private static void OnClickedMultiplayerButton(ISleekElement button)
         {
             try
             {
-                if (!SteamP2PFriendsPlugin.DiagnosticBuildValid)
+                if (!SteamP2PFriendsPlugin.IsP2PEntryReady)
                 {
                     RoleLogger.Error("[Shared]",
-                        "[P2P-UI] DiagnosticBuildValid=false，拒绝打开 P2P 菜单（P0-C4 二次硬门控）");
-                    try { MenuUI.alert("SteamP2PFriends 自检未通过，多人联机功能不可用。请查看日志。"); } catch { }
+                        "[P2P-UI] Route B 未就绪，拒绝打开 P2P 菜单（硬门控）");
+                    try { MenuUI.alert("SteamP2PFriends 尚未完成联机初始化，请稍后再试并查看日志。"); } catch { }
                     return;
                 }
 

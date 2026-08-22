@@ -69,13 +69,13 @@ namespace SteamP2PFriends.Host
         {
             if (!RequireGameThread(nameof(StartP2PServer))) return;
 
-            //   DiagnosticBuildValid，在任何状态写入之前返回。
-            //   防止 INVALID 时菜单按钮虽然不注入，但其他调用路径仍能触发 StartP2PServer。
-            if (!SteamP2PFriendsPlugin.DiagnosticBuildValid)
+            // The final host entry must require both the diagnostic build and the completed
+            // Route B lifecycle registration, before any session state can be mutated.
+            if (!SteamP2PFriendsPlugin.IsP2PEntryReady)
             {
                 RoleLogger.Error("[Host]",
-                    "!!! StartP2PServer 拒绝执行：DiagnosticBuildValid=false（P0-C4 硬门控）!!!");
-                try { MenuUI.alert("SteamP2PFriends 自检未通过，P2P 服务器启动被拒绝。请查看日志。"); } catch { }
+                    "!!! StartP2PServer 拒绝执行：P2P entry is not ready（硬门控）!!!");
+                try { MenuUI.alert("SteamP2PFriends 尚未完成联机初始化，P2P 服务器启动被拒绝。请查看日志。"); } catch { }
                 return;
             }
 
@@ -191,10 +191,8 @@ namespace SteamP2PFriends.Host
                 if (!P2PWhitelistService.TryBootstrap(Provider.user, out whitelistFailure))
                     throw new InvalidOperationException("P2P whitelist bootstrap failed: " + whitelistFailure);
 
-                try { P2PJoinApprovalService.ResetForSession(); }
-                catch (Exception apEx) { RoleLogger.Warn("[Host]", "[P2P-Approval] ResetForSession 异常（不阻断）: " + apEx); }
-                try { P2PQuarantineAdmissionService.ResetForSession(); }
-                catch (Exception qEx) { RoleLogger.Warn("[Host]", "[P2P-Quarantine] ResetForSession 异常（不阻断）: " + qEx); }
+                try { P2PApprovalManager.ResetForSession(); }
+                catch (Exception apEx) { RoleLogger.Warn("[Host]", "[P2P-Approval] Route B reset failed (non-blocking): " + apEx); }
                 try { SteamPersonaDisplay.ResetForSession(); }
                 catch (Exception nameEx) { RoleLogger.Warn("[Host]", "[P2P-Persona] ResetForSession 异常（不阻断）: " + nameEx.GetType().Name); }
                 //   不得重复订阅死亡事件；ResetForSession 只清状态。
@@ -1083,10 +1081,8 @@ namespace SteamP2PFriends.Host
                     {
                         RoleLogger.Error("[Host]", "[P2P-WL] ResetAfterP2PExit (Abort) 异常（不阻断）: " + wlEx);
                     }
-                    try { P2PJoinApprovalService.ResetAfterSession(); }
-                    catch (Exception apEx) { RoleLogger.Warn("[Host]", "[P2P-Approval] ResetAfterSession (Abort) 异常（不阻断）: " + apEx); }
-                    try { P2PQuarantineAdmissionService.ResetForSession(); }
-                    catch (Exception qEx) { RoleLogger.Warn("[Host]", "[P2P-Quarantine] ResetAfterSession (Abort) 异常（不阻断）: " + qEx); }
+                    try { P2PApprovalManager.ResetForSession(); }
+                    catch (Exception apEx) { RoleLogger.Warn("[Host]", "[P2P-Approval] Route B reset failed (Abort): " + apEx); }
                     try { SteamPersonaDisplay.ResetAfterSession(); }
                     catch (Exception nameEx) { RoleLogger.Warn("[Host]", "[P2P-Persona] ResetAfterSession (Abort) 异常（不阻断）: " + nameEx.GetType().Name); }
                     try { P2PWorldStatusBroadcaster.ResetForSession(); }
@@ -1213,10 +1209,8 @@ namespace SteamP2PFriends.Host
                     {
                         RoleLogger.Error("[Host]", "[P2P-WL] ResetAfterP2PExit (Stop) 异常（不阻断）: " + wlEx);
                     }
-                    try { P2PJoinApprovalService.ResetAfterSession(); }
-                    catch (Exception apEx) { RoleLogger.Warn("[Host]", "[P2P-Approval] ResetAfterSession (Stop) 异常（不阻断）: " + apEx); }
-                    try { P2PQuarantineAdmissionService.ResetForSession(); }
-                    catch (Exception qEx) { RoleLogger.Warn("[Host]", "[P2P-Quarantine] ResetAfterSession (Stop) 异常（不阻断）: " + qEx); }
+                    try { P2PApprovalManager.ResetForSession(); }
+                    catch (Exception apEx) { RoleLogger.Warn("[Host]", "[P2P-Approval] Route B reset failed (Stop): " + apEx); }
                     try { SteamPersonaDisplay.ResetAfterSession(); }
                     catch (Exception nameEx) { RoleLogger.Warn("[Host]", "[P2P-Persona] ResetAfterSession (Stop) 异常（不阻断）: " + nameEx.GetType().Name); }
                 }
@@ -1656,13 +1650,8 @@ namespace SteamP2PFriends.Host
                 ulong steamId = player.playerID.steamID.m_SteamID;
                 RoleLogger.Info("[Host]", $"[P2P] 检测到玩家 {playerName} 连入 (steamID={steamId})");
 
-                // (AlreadyApproved -> JoinApproved, Activated -> JoinQuarantined, Rejected* -> none).
-                QuarantinePromotionResult promotion = P2PQuarantineAdmissionService.PromoteConnected(player);
-                // add a second Provider.onEnemyConnected subscription.
-                try { P2PWorldStatusBroadcaster.OnPlayerConnected(player, promotion); }
-                catch (Exception bcEx) { RoleLogger.Warn("[Host]", $"[WorldBroadcast] connect forward failed: {bcEx.GetType().Name}"); }
-
-                ApplySessionAdminPolicy(player);
+                // Route B transitions after Provider.onServerConnected. At this earlier event the
+                // player must not receive either a join broadcast or temporary admin privileges.
             }
             catch (Exception ex)
             {
@@ -1675,7 +1664,7 @@ namespace SteamP2PFriends.Host
         /// Vanilla admin/unadmin are used only as Reliable state replication helpers; the in-memory
         /// persistent list is restored to its exact pre-call snapshot before returning.
         /// </summary>
-        private static void ApplySessionAdminPolicy(SteamPlayer player)
+        internal static void ApplySessionAdminPolicyAfterApproval(SteamPlayer player)
         {
             try
             {

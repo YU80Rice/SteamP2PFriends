@@ -97,6 +97,10 @@
       <HintPath>..\..\Libs\UnityEngine.AudioModule.dll</HintPath>
       <Private>True</Private>
     </Reference>
+    <Reference Include="UnityEngine.AnimationModule">
+      <HintPath>..\..\Libs\UnityEngine.AnimationModule.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
     <Reference Include="UnityEngine.IMGUIModule">
       <HintPath>..\..\Libs\UnityEngine.IMGUIModule.dll</HintPath>
       <Private>True</Private>
@@ -132,21 +136,14 @@
   <ItemGroup>
     <Compile Include="Program.cs" />
     <Compile Include="WhitelistServiceTests.cs" />
-    <Compile Include="JoinApprovalServiceTests.cs" />
-    <Compile Include="UiLifecycleTests.cs" />
+    <Compile Include="RouteBApprovalTests.cs" />
+    <Compile Include="P2PEntryReadinessGateTests.cs" />
     <Compile Include="SteamPersonaDisplayTests.cs" />
-    <Compile Include="ApprovalPanelLayoutTests.cs" />
-    <Compile Include="AtomicSnapshotTests.cs" />
-    <Compile Include="Stage7_5Tests.cs" />
-    <Compile Include="Stage7_6Tests.cs" />
-    <Compile Include="Stage7_8Tests.cs" />
-    <Compile Include="HarmonyMetadataTests.cs" />
     <Compile Include="HarmonyCompatibilityAuditTests.cs" />
     <Compile Include="LoggingPolicyTests.cs" />
-    <Compile Include="ExplicitDnsDirectIpTests.cs" />
-    <Compile Include="Stage10WorldStatusBroadcastTests.cs" />
     <Compile Include="AuthorityGenerationGateTests.cs" />
     <Compile Include="InventoryUiProjectionTests.cs" />
+    <Compile Include="RemoteCollisionAnimationPolicyTests.cs" />
     <Compile Include="Fakes\FakeWhitelistStore.cs" />
     <Compile Include="Fakes\FakeWhitelistRuntimeContext.cs" />
     <Compile Include="Fakes\FakeWhitelistDisconnectGateway.cs" />

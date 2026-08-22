@@ -1,7 +1,9 @@
+using SDG.Unturned;
 using SteamP2PFriends.Host;
 using SteamP2PFriends.WhitelistTests.Fakes;
 using Steamworks;
 using System;
+using System.Collections.Generic;
 
 namespace SteamP2PFriends.WhitelistTests
 {
@@ -313,6 +315,57 @@ namespace SteamP2PFriends.WhitelistTests
                 if (gateway.DisconnectCallCount != 1) return Fail("gateway should be called exactly once", "count=" + gateway.DisconnectCallCount);
             }
             return true;
+        }
+
+        internal static bool Test_ApprovalRevoke_CommitBeforeTargetedKick()
+        {
+            var store = new FakeWhitelistStore { ContainsResult = false };
+            var runtime = new FakeWhitelistRuntimeContext
+            {
+                LocalUserValue = HostId,
+                IsActiveP2PHostValue = true
+            };
+            var gateway = new FakeWhitelistDisconnectGateway();
+            using (P2PWhitelistService.InstallTestDependencies(store, runtime, gateway))
+            {
+                P2PWhitelistService.ResetForP2PStart();
+                bool ok = P2PWhitelistService.TryRemoveForApprovalRevoke(TargetId, out string feedback);
+                if (!ok) return Fail("approval revoke should commit", feedback);
+                return store.SnapshotCount == 1 && store.RemoveCount == 1 && store.SaveCount == 1 &&
+                       store.LoadCount == 1 && store.ContainsCount == 1 && gateway.DisconnectCallCount == 0;
+            }
+        }
+
+        internal static bool Test_ApprovalRevoke_SaveFailureDoesNotDisconnect()
+        {
+            var store = new FakeWhitelistStore
+            {
+                ContainsResult = false,
+                ThrowOnSave = new InvalidOperationException("save-fail")
+            };
+            var runtime = new FakeWhitelistRuntimeContext
+            {
+                LocalUserValue = HostId,
+                IsActiveP2PHostValue = true
+            };
+            var gateway = new FakeWhitelistDisconnectGateway();
+            using (P2PWhitelistService.InstallTestDependencies(store, runtime, gateway))
+            {
+                P2PWhitelistService.ResetForP2PStart();
+                bool ok = P2PWhitelistService.TryRemoveForApprovalRevoke(TargetId, out _);
+                return !ok && store.RestoreCount == 1 && gateway.DisconnectCallCount == 0;
+            }
+        }
+
+        internal static bool Test_NativeContains_UsesPhysicalWhitelistMembership()
+        {
+            var list = new List<SteamWhitelistID>
+            {
+                new SteamWhitelistID(HostId, "P2P_HOST", HostId)
+            };
+
+            return NativeWhitelistStore.ContainsRawForTest(list, HostId) &&
+                   !NativeWhitelistStore.ContainsRawForTest(list, TargetId);
         }
 
         internal static bool Test_Remove_NoOp_NoSave_NoDisconnect()

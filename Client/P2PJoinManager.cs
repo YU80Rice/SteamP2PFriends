@@ -3,6 +3,7 @@ using SteamP2PFriends.Host;
 using SteamP2PFriends.Shared;
 using SteamP2PFriends.Shared.Enums;
 using Steamworks;
+using System;
 using System.Runtime.CompilerServices;
 using UnityEngine;
 
@@ -21,6 +22,7 @@ namespace SteamP2PFriends.Client
         private static ulong _targetSteamId;
         private static int _attempt;
         private static float _connectStartTime;
+        private static bool _connectWatchdogWarningFired;
         private static bool _subscribed;
         private static ESteamConnectionFailureInfo _lastFailureInfo;
 
@@ -95,23 +97,16 @@ namespace SteamP2PFriends.Client
         public static bool TryConnectToHost(ulong steamIdRaw)
         {
             ThreadUtil.assertIsGameThread();
-            P2PApprovalWaitController.CancelForExplicitUserJoin();
-            return TryConnectToHostCore(steamIdRaw, P2PConnectOrigin.ExplicitUserAction);
+            return TryConnectToHostCore(steamIdRaw);
         }
 
-        internal static bool TryConnectToHostFromApprovalWait(ulong steamIdRaw)
+        private static bool TryConnectToHostCore(ulong steamIdRaw)
         {
-            ThreadUtil.assertIsGameThread();
-            return TryConnectToHostCore(steamIdRaw, P2PConnectOrigin.ApprovalWaitRetry);
-        }
-
-        private static bool TryConnectToHostCore(ulong steamIdRaw, P2PConnectOrigin origin)
-        {
-            if (!SteamP2PFriendsPlugin.DiagnosticBuildValid)
+            if (!SteamP2PFriendsPlugin.IsP2PEntryReady)
             {
                 RoleLogger.Error(DynamicRole(),
-                    "!!! TryConnectToHostCore 拒绝执行：DiagnosticBuildValid=false（P0-C4 硬门控）!!!");
-                try { SafeAlert("SteamP2PFriends 自检未通过，客机连接被拒绝。请查看日志。"); } catch { }
+                    "!!! TryConnectToHostCore 拒绝执行：P2P entry is not ready（硬门控）!!!");
+                try { SafeAlert("SteamP2PFriends 尚未完成联机初始化，客机连接被拒绝。请查看日志。"); } catch { }
                 return false;
             }
 
@@ -164,6 +159,7 @@ namespace SteamP2PFriends.Client
             _lastFailureInfo = ESteamConnectionFailureInfo.NONE;
             SetState(EJoinState.Connecting, "join-request");
             _connectStartTime = Time.realtimeSinceStartup;
+            _connectWatchdogWarningFired = false;
             _lastStage = "Connecting";
             _postAcceptedWatchdogFired = false;
             _acceptedAndLocalComponentsTime = 0f;
@@ -231,16 +227,35 @@ namespace SteamP2PFriends.Client
 
         private static void HandleConnectingTick(float now)
         {
-            if (now - _connectStartTime > TimeoutSeconds)
+            if (!_connectWatchdogWarningFired && now - _connectStartTime > TimeoutSeconds)
             {
-                SetState(EJoinState.Timeout, "connect-watchdog");
-                RoleLogger.Error(DynamicRole(),
-                    $"!!! 连接超时 !!! target={_targetSteamId} elapsed={now - _connectStartTime:F1}s " +
-                    $"(lastFailure={_lastFailureInfo}) lastStage={_lastStage}");
-                SafeAlert($"连接超时（{TimeoutSeconds}s）。请检查日志并手动重连。({_lastFailureInfo})");
-                LogFailureDiagnosticHint(_lastFailureInfo);
-                return;
+                _connectWatchdogWarningFired = true;
+                RoleLogger.Warn(DynamicRole(),
+                    $"[P2P-Connection] connect watchdog observation: target={_targetSteamId} " +
+                    $"elapsed={now - _connectStartTime:F1}s threshold={TimeoutSeconds:F0}s " +
+                    $"lastFailure={_lastFailureInfo} lastStage={_lastStage} " +
+                    $"isConnected={Provider.isConnected}; " +
+                    "native handshake remains authoritative, connection was not failed or disconnected");
             }
+        }
+
+        internal static bool IsP2PHandshakeActive =>
+            _state == EJoinState.Connecting && _targetSteamId != 0UL;
+
+        internal static void NotifyVerifyReceived()
+        {
+            if (!IsP2PHandshakeActive) return;
+            _lastStage = "Verify received";
+            RoleLogger.Info(DynamicRole(),
+                $"[P2P-Connection] native stage advanced: Verify received elapsed={Time.realtimeSinceStartup - _connectStartTime:F1}s");
+        }
+
+        internal static void NotifyAuthenticateSending()
+        {
+            if (!IsP2PHandshakeActive) return;
+            _lastStage = "Authenticate sending";
+            RoleLogger.Info(DynamicRole(),
+                $"[P2P-Connection] native stage advanced: Authenticate sending elapsed={Time.realtimeSinceStartup - _connectStartTime:F1}s");
         }
 
         /// <summary>
@@ -458,12 +473,12 @@ namespace SteamP2PFriends.Client
 
         internal static bool TryConnectFromLobby(ulong steamIdRaw)
         {
-            //   虽然内部会调 TryConnectToHost（已有门控），但 lobby 入口应在调用前就拒绝，
-            //   避免在 DiagnosticBuildValid=false 时仍记录 "LobbyGameCreated 自动连接" 误导日志
-            if (!SteamP2PFriendsPlugin.DiagnosticBuildValid)
+            // Although this method calls TryConnectToHost (which has the final gate), reject
+            // before writing a misleading automatic-join log while Route B is not operational.
+            if (!SteamP2PFriendsPlugin.IsP2PEntryReady)
             {
                 RoleLogger.Error(DynamicRole(),
-                    "!!! TryConnectFromLobby 拒绝执行：DiagnosticBuildValid=false（P0-C4 硬门控）!!!");
+                    "!!! TryConnectFromLobby 拒绝执行：P2P entry is not ready（硬门控）!!!");
                 return false;
             }
 
@@ -534,6 +549,7 @@ namespace SteamP2PFriends.Client
                 Provider.connect(parameters, null, null);
                 P2PConnectionJournal.ClientConnectCallReturned(_targetSteamId);
                 _connectStartTime = Time.realtimeSinceStartup;
+                _connectWatchdogWarningFired = false;
                 _lastStage = "Provider.connect called";
                 RoleLogger.Info(DynamicRole(),
                     $"[Diag] Provider.connect() 已调用，等待 onClientConnected/onClientDisconnected 回调（超时 {TimeoutSeconds}s）");
@@ -550,8 +566,6 @@ namespace SteamP2PFriends.Client
         private static void OnClientConnected()
         {
             ThreadUtil.assertIsGameThread();
-            P2PApprovalWaitController.NotifyConnectionAccepted();
-
             RoleLogger.Info(DynamicRole(),
                 $"[Diag] onClientConnected 触发 state={_state} target={_targetSteamId} " +
                 $"isConnected={Provider.isConnected} isServer={Provider.isServer}");
@@ -569,6 +583,13 @@ namespace SteamP2PFriends.Client
 
         private static void OnClientDisconnected()
         {
+            // Provider.onClientDisconnected is the authoritative session boundary. Clear the
+            // quarantine view here because UI ticks may be suspended during menu teardown.
+            try { P2PQuarantineClientView.Destroy(); }
+            catch (Exception ex)
+            {
+                RoleLogger.Warn(DynamicRole(), "[P2P-QuarantineUI] disconnect cleanup failed: " + ex.GetType().Name);
+            }
             _lastFailureInfo = Provider.connectionFailureInfo;
 
             RoleLogger.Info(DynamicRole(),
@@ -613,7 +634,6 @@ namespace SteamP2PFriends.Client
             RoleLogger.Error(DynamicRole(),
                 $"!!! 连接失败 !!! target={_targetSteamId} state={_state} info={_lastFailureInfo}");
 
-            // Legacy WHITELISTED auto-retry is intentionally disabled to prevent Steam rate limiting.
             HandleDisconnectFailureRouting(_lastFailureInfo, _targetSteamId);
         }
 
@@ -727,6 +747,7 @@ namespace SteamP2PFriends.Client
             _lastStage = null;
             _localComponentsInitializedSignaled = false;
             _postAcceptedWatchdogFired = false;
+            _connectWatchdogWarningFired = false;
             _acceptedAndLocalComponentsTime = 0f;
             NativeLoadingGateDumper.StopPostAcceptedTracking();
         }

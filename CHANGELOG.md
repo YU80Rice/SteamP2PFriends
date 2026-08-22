@@ -1,10 +1,91 @@
 # Changelog
 
+## v0.2.3.70-beta.2 - 2026-08-22
+
+- 修复 SteamUser P2P 客机在 listen-host `offlineOnly` 握手中因 SteamInventory 证明无法由 GameServer inventory 上下文反序列化，导致主机队列长期停留在 `hasProof=false` 的问题；仅对插件发起的 P2P 握手发送原版支持的零长度经济证明，仍由原版 `hasAuthentication && hasProof && hasGroup` 决定接受。
+- 客户端 35 秒连接 watchdog 改为单次观测告警；延迟到达的原版 `Verify` / `Authenticate` 不再被插件提前标记为 `Timeout`，真正失败仍由原版断开回调和 `connectionFailureInfo` 收敛。
+- 握手兼容补丁注册纳入 `DiagnosticBuildValid` 与 P2P 入口双重 fail-closed 门；新增主机 proof 前后状态和客机握手阶段日志，不记录认证票据。
+- Debug/Release 静态编译 0 errors / 0 warnings；自动化回归 `61/61 PASS`。重新构建的 Debug DLL SHA-256 为 `A575A0F72DB8C1C1837223F03A3973F51043044D4B5BEFA7035C9AC7B5365E37`。
+- 用户已使用上述 `0.2.3.70-beta.2` Debug DLL 回归 Issue #7：房主远离时，客机可通过 Elver 权限门，不再出现开门动画后被房主权威碰撞拉回。该结论只覆盖权限门碰撞；当前哈希的加入、审核、撤销与再次申请仍应按后续双机诊断包持续回归。
+
+## v0.2.3.69-beta.2 - 2026-08-21
+
+- 修复 listen-host 房主离开客机所在区域后，Elver `Binary_State` 权限门虽已同步开门状态、但房主权威 Collider 仍停留在关闭姿态并持续拉回客机的问题。
+- 远区碰撞覆盖现在仅对带 Collider 的动态 `InteractableObjectBinaryState` 补齐 U3DS 原生 `AnimationCullingType.AlwaysAnimate` 语义，并在覆盖撤销、断线或会话清理时恢复原始 culling type。
+- 保留既有普通家具远区碰撞与远区渲染关闭策略；不全局修改地图 Animation，也不改变 Binary State RPC、权限条件或网络协议。
+- Issue7 Debug 日志增加 Animation culling 计数，并修复无效 LevelObject/Transform 导致的重复 `activation-exception` 配额消耗。
+- 静态编译与自动化回归完成后仍需同一 Debug DLL 哈希的双机复测，不能仅凭构建宣称 issues#7 运行修复完成。
+
+## v0.2.3.68-beta.2 - 2026-08-21
+
+- 根据 `.67` 双机日志与 U3-SDK 源码重新定位软隔离：禁止在生成 `*_Read` 参数解析器和 `PlayerInput.FixedUpdate` 整体返回。
+- 服务端始终完整消费 `PlayerInput.ReceiveInputs`；其 Postfix 仅清洗待审远端已解析数据包的移动、攻击、射线交互字段，保留帧号、反作弊窗口、队列推进与确认帧。
+- RPC 权威门迁移到参数解析完成后的真实 `[SteamCall]` 业务方法；强制覆盖建筑回收、仓储、采集、门、背包和装备等 U3-SDK 已核验入口。
+- 房主本地通过 `channel.IsLocalPlayer` / `ServerInvocationContext.origin` 明确排除，不再依赖可能漂移的 `Provider.user` 比较。
+- Release 构建 0 errors / 0 warnings；回归 `58/58 PASS`。仍需当前 DLL 哈希的双机复测。
+
+## v0.2.3.67-beta.2 - 2026-08-21
+
+- 修复待审核客机被全局 `InvokeMethod` 门阻塞在原版加载/排队界面的问题：改为仅拦截输入、物品、建造、制作、对象和载具等业务入口，握手与世界加载 RPC 保持原版流程。
+- 拒绝、审核超时或撤销授权只移除本次待审/白名单状态并踢出，不再把 SteamID 锁死到本次房间会话；同一玩家可以重新连接并再次申请。
+- 待审玩家无论是否残留管理员身份、房主是否开启作弊，均禁止执行 `/` 与 `@` 指令。
+- Release 构建 0 errors / 0 warnings；Route B 回归 `57/57 PASS`。新 DLL 仍需双机复测，不能继承 `.66` 的运行结论。
+
 ## 项目发展史
 
 从原版 P2P 原型、LaunchP2PHostManager 与独立 U3DS 路线探索，到 SteamUser 身份重构、连续双机失败复盘、审计制度化和 `v0.2.3.60-beta.1` 总回归，完整叙事与证据索引见 [DEVELOPMENT_TIMELINE.md](./DEVELOPMENT_TIMELINE.md)。本文只把归档报告、源代码目录、Git 提交和测试 artifact 能够支持的内容写成事实。
 
 本项目从 `0.2.3.56` 开始在此记录面向用户的发布变更。更早的实验、审计与双机测试历史保留在 `AUDIT_CHECKLIST.md` 与本地 `.audit` 归档中。
+
+## v0.2.3.66-beta.2 - 2026-08-21
+
+> Route B 撤销允许修复构建：修复已成功写入白名单的客机在房主点击“撤销允许”后，被错误报告为持久化失败且保持连接的问题。
+
+### Fixed
+
+- 白名单服务的持久化核验、世界内待审核判断和 P 键条目状态，改为直接读取 `SteamWhitelist.list` 的物理成员关系。
+- `SteamWhitelist.checkWhitelisted` 只保留给原版连接握手及 Route B 的临时握手放行补丁；不再被误用于授权状态或撤销后的反查。
+- 因此，撤销操作在成功移除、保存、重载后会得到正确的“未授权”结果，随后仅踢出该目标客机；新访客也会正确进入世界内待审核隔离，而不会被握手许可误判为已授权。
+
+### Verification
+
+- 已将本次双端手动测试日志归档至 `issues#5/`：除撤销允许外，其余已测联机与 P 键流程正常；该归档精确记录了此前的误判路径。
+- 自动化回归新增物理白名单成员关系测试；仍需要 `0.2.3.66-beta.2` 的双机测试来验证撤销踢出和未授权客机的 30 秒隔离门控。
+
+## v0.2.3.65-beta.2 - 2026-08-20
+
+> 启动时序修复构建：修复 `0.2.3.64` 在 Unturned 游戏主线程注册前安装 Route B 审批生命周期 Hook，导致插件主动隐藏“多人联机”按钮的问题。
+
+### Fixed
+
+- `P2PApprovalManager.InstallProviderLifecycleHooks()` 不再从 BepInEx `Awake()` 调用；它会在首个已确认的 Unturned 游戏主线程 `Update()` 中安装。
+- Route B 的最终门禁只会在生命周期 Hook 安装成功后放行菜单入口；若该步骤失败，仍保持 fail-closed 并写出明确的 `[P2P-Approval]` 启动日志。
+- 原版单人菜单构造早于 Hook 就绪时不会显示入口；Hook 成功后会对已创建的菜单幂等补注入。按钮点击、创建房间和加入房间也使用同一就绪门，避免任何早期或陈旧 UI 绕过。
+- SteamID 直连、Lobby 自动连接、客机最终连接函数和房主最终启动函数同样检查该门，防止非菜单调用路径绕过启动时序保护。
+
+### Verification
+
+- 自动化回归覆盖上述早菜单、生命周期失败、重复成功/卸载重置门禁路径，以及既有 Route B 状态机，合计 `55/55 PASS`。
+- 已归档两台机器使用 `0.2.3.64` 的同一启动故障证据：`issues#4/`。本构建需要新的双机日志证明实际菜单恢复和后续联机流程。
+
+## v0.2.3.64-beta.2 - 2026-08-20
+
+> Beta 2 Route B 准入状态机整理构建：未知客机先完整通过原版握手，再进入世界内待审核隔离；房主通过 P 键玩家列表完成批准、拒绝或撤销允许。
+
+### Changed
+
+- 恢复并统一 P 键玩家列表前端：房主自身行显示“复制ID”；待审客机显示“允许 / 拒绝”；已授权在线客机显示“撤销允许”。
+- “撤销允许”使用专用无副作用白名单事务：先完成内存移除、保存、重载和反查，再安全断开对应客机；不会调用原版会提前踢人的 `SteamWhitelist.unwhitelist`。房主自身和待审状态均不能误走撤销分支。
+- Route B 的世界内 `P2PApprovalManager` 成为唯一准入状态机，继续负责待审超时、断线清理、隔离信号和白名单持久化边界。
+
+### Removed
+
+- 删除旧的握手前审批队列、拒绝捕获、预约隔离与审批等待自动重连链路；它们不再参与 P2P 客机连接、P 键 UI 或启动期注册门。
+- 删除旧 ESC 审批面板和重复 P 键装饰器，避免旧新两套 UI 重复包裹同一原版玩家行。
+
+### Verification
+
+- 自动化回归覆盖 Route B 握手放行、世界内隔离、批准、拒绝、超时、断线清理，以及新增的撤销白名单并踢出分支。双机运行验证仍需使用本构建的新 DLL 独立执行。
 
 ## v0.2.3.63-beta.2 - 2026-08-20
 

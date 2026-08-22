@@ -3,7 +3,7 @@ using Steamworks;
 namespace SteamP2PFriends.WhitelistTests.Fakes
 {
     /// <summary>
-    /// Stage 7-3 v2 单元测试 Fake：P2PJoinApprovalService.IApprovalRuntimeContext。
+    /// Route B 单元测试 Fake：P2PApprovalManager.IApprovalRuntimeContext。
     /// 蓝图 v2 §3.2：测试可行性，不启动 Unturned/Steam/Unity。
     /// </summary>
     internal sealed class FakeApprovalRuntimeContext : SteamP2PFriends.Host.IApprovalRuntimeContext
